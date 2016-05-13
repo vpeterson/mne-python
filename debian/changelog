@@ -3,6 +3,7 @@ python-mne (0.12+dfsg-1) unstable; urgency=medium
   * Fresh upstream release
   * debian/control
     - boosted policy to 3.9.8
+    - suggest python-pycuda
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 13 May 2016 17:38:17 -0400
 
