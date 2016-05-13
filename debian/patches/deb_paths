@@ -4,9 +4,9 @@ Origin: upstream
 Forwarded: not-needed
 Reviewed-By: Yaroslav O. Halchenko <debian@onerussian.com>
 
---- python-mne-0.10+dfsg.orig/mne/report.py
-+++ python-mne-0.10+dfsg/mne/report.py
-@@ -32,7 +32,7 @@ from .parallel import parallel_func, che
+--- a/mne/report.py
++++ b/mne/report.py
+@@ -31,7 +31,7 @@ from .parallel import parallel_func, che
  
  from .externals.tempita import HTMLTemplate, Template
  from .externals.six import BytesIO
@@ -15,7 +15,7 @@ Reviewed-By: Yaroslav O. Halchenko <debian@onerussian.com>
  
  VALID_EXTENSIONS = ['raw.fif', 'raw.fif.gz', 'sss.fif', 'sss.fif.gz',
                      '-eve.fif', '-eve.fif.gz', '-cov.fif', '-cov.fif.gz',
-@@ -1160,21 +1160,27 @@ class Report(object):
+@@ -1159,21 +1159,27 @@ class Report(object):
          """Initialize the renderer.
          """
  
