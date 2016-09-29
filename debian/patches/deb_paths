@@ -15,7 +15,7 @@ Reviewed-By: Yaroslav O. Halchenko <debian@onerussian.com>
  
  VALID_EXTENSIONS = ['raw.fif', 'raw.fif.gz', 'sss.fif', 'sss.fif.gz',
                      '-eve.fif', '-eve.fif.gz', '-cov.fif', '-cov.fif.gz',
-@@ -1159,21 +1159,27 @@ class Report(object):
+@@ -1187,21 +1187,27 @@ class Report(object):
          """Initialize the renderer.
          """
  
