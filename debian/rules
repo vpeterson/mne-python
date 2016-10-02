@@ -3,6 +3,9 @@
 
 NOSETESTS=nosetests
 
+# to avoid cannot set toolkit to qt4 because it has already been set to wx
+export ETS_TOOLKIT=qt4
+
 %:
 	dh $@ --with python2 --buildsystem python_distutils
 
