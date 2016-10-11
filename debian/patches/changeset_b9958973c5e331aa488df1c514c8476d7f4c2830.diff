@@ -1,0 +1,61 @@
+From: Yaroslav Halchenko <debian@onerussian.com>
+Subject: ENH+BF+RF: skip two tests requiring mayavi, and include into SkipTest msg caught exception
+  RF: no need for helper bool variable -- all handling could be done in
+try/except
+
+--- a/mne/gui/tests/test_kit2fiff_gui.py
++++ b/mne/gui/tests/test_kit2fiff_gui.py
+@@ -13,6 +13,7 @@ import mne
+ from mne.io.kit.tests import data_dir as kit_data_dir
+ from mne.io import read_raw_fif
+ from mne.utils import _TempDir, requires_traits, run_tests_if_main
++from mne.utils import requires_mayavi
+ 
+ mrk_pre_path = os.path.join(kit_data_dir, 'test_mrk_pre.sqd')
+ mrk_post_path = os.path.join(kit_data_dir, 'test_mrk_post.sqd')
+@@ -25,6 +26,7 @@ warnings.simplefilter('always')
+ 
+ 
+ @requires_traits
++@requires_mayavi
+ def test_kit2fiff_model():
+     """Test CombineMarkersModel Traits Model."""
+     from mne.gui._kit2fiff_gui import Kit2FiffModel, Kit2FiffPanel
+--- a/mne/gui/tests/test_marker_gui.py
++++ b/mne/gui/tests/test_marker_gui.py
+@@ -12,6 +12,7 @@ from nose.tools import assert_true, asse
+ from mne.io.kit.tests import data_dir as kit_data_dir
+ from mne.io.kit import read_mrk
+ from mne.utils import _TempDir, requires_traits, run_tests_if_main
++from mne.utils import requires_mayavi
+ 
+ mrk_pre_path = os.path.join(kit_data_dir, 'test_mrk_pre.sqd')
+ mrk_post_path = os.path.join(kit_data_dir, 'test_mrk_post.sqd')
+@@ -21,6 +22,7 @@ warnings.simplefilter('always')
+ 
+ 
+ @requires_traits
++@requires_mayavi
+ def test_combine_markers_model():
+     """Test CombineMarkersModel Traits Model"""
+     from mne.gui._marker_gui import CombineMarkersModel, CombineMarkersPanel
+--- a/mne/utils.py
++++ b/mne/utils.py
+@@ -816,14 +816,11 @@ def requires_module(function, name, call
+ 
+     @wraps(function)
+     def dec(*args, **kwargs):
+-        skip = False
+         try:
+             exec(call) in globals(), locals()
+-        except Exception:
+-            skip = True
+-        if skip is True:
+-            raise SkipTest('Test %s skipped, requires %s'
+-                           % (function.__name__, name))
++        except Exception as exc:
++            raise SkipTest('Test %s skipped, requires %s. Got exception (%s)'
++                           % (function.__name__, name, exc))
+         return function(*args, **kwargs)
+     return dec
+ 
