@@ -1,4 +1,4 @@
-python-mne (0.13+dfsg-1) unstable; urgency=medium
+python-mne (0.13+git5-g028f2ee-1) unstable; urgency=medium
 
   * Fresh upstream release
   * debian/patches
@@ -8,7 +8,7 @@ python-mne (0.13+dfsg-1) unstable; urgency=medium
     - fake http_proxy settings to forbid network access
     - HOME=build/ to avoid trying to deal with / as HOME
 
- -- Yaroslav Halchenko <debian@onerussian.com>  Wed, 28 Sep 2016 20:38:09 -0400
+ -- Yaroslav Halchenko <debian@onerussian.com>  Tue, 11 Oct 2016 14:59:44 -0400
 
 python-mne (0.12+dfsg-2) unstable; urgency=medium
 
