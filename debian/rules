@@ -6,6 +6,9 @@ NOSETESTS=nosetests
 # to avoid cannot set toolkit to qt4 because it has already been set to wx
 export ETS_TOOLKIT=qt4
 
+export  http_proxy=http://127.0.0.1:9/
+export  https_proxy=http://127.0.0.1:9/
+
 %:
 	dh $@ --with python2 --buildsystem python_distutils
 
@@ -19,6 +22,8 @@ override_dh_auto_build:
 	echo -e "\n" >> $(CURDIR)/mne/html/bootstrap.min.js
 
 override_dh_auto_test:
+	mkdir -p build
+	HOME=$(CURDIR)/build \
 	MNE_DONTWRITE_HOME=true MNE_SKIP_SAMPLE_DATASET_TESTS=true MNE_FORCE_SERIAL=true MNE_SKIP_NETWORK_TESTS=1 \
 	  xvfb-run --auto-servernum --server-num=20 -s "-screen 0 1024x768x24 -ac +extension GLX +render -noreset" \
 	  $(NOSETESTS) mne
