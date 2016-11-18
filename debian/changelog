@@ -3,6 +3,8 @@ python-mne (0.13+git8-gcb8707f+dfsg-1) unstable; urgency=medium
   * Fresh upstream maint snapshot hopefully resolving issues with unicode
     - removed --exclude=test_add_slider_to_section
   * This time with +dfsg cleansing of .min.js files
+  * debian/copyright
+    - MIT -> Expat, consistent -Clause for BSD, https url
 
  -- Yaroslav Halchenko <debian@onerussian.com>  Fri, 18 Nov 2016 10:39:08 -0500
 

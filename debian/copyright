@@ -1,4 +1,4 @@
-Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: MNE-Python
 Upstream-Contact: Alexandre Gramfort <alexandre.gramfort@m4x.org>
 Source: http://github.com/mne-tools/mne-python
@@ -7,11 +7,11 @@ Comment: File AppEULA.rst refers to code that is documented in this package but 
 
 Files: *
 Copyright: 2010-2016, MNE-Python Developers
-License: BSD-3
+License: BSD-3-Clause
 
 Files: doc/sphinxext/*
 Copyright: 2008, Stefan van der Walt <stefan@mentat.za.net>, Pauli Virtanen <pav@iki.fi>
-License: BSD-2
+License: BSD-2-Clause
   1. Redistributions of source code must retain the above copyright
      notice, this list of conditions and the following disclaimer.
   2. Redistributions in binary form must reproduce the above copyright
@@ -21,34 +21,34 @@ License: BSD-2
 
 Files: debian/*
 Copyright: 2010-2015, Yaroslav Halchenko <debian@onerussian.com>, Alexandre Gramfort <alexandre.gramfort@m4x.org>
-License: BSD-3
+License: BSD-3-Clause
 
 Files: mne/externals/decorator.py
 Copyright: 2005-2012, Michele Simionato
-License: BSD
+License: BSD-2-Clause
 
 Files: mne/externals/Fieldtrip.py
 Copyright: 2008, Robert Oostenveld, S. Klanke
   F.C. Donders Centre for Cognitive Neuroimaging,
   Radboud University Nijmegen, The Netherlands.
   http://www.ru.nl/fcdonders/fieldtrip
-License: BSD-3
+License: BSD-3-Clause
 
 Files: mne/externals/jdcal.py
 Copyright: 2010, Prasanth Nair, <prasanthhn@gmail.com>
-License: BSD
+License: BSD-2-Clause
 
 Files: mne/externals/six.py
 Copyright: 2010-2013 Benjamin Peterson
-License: MIT
+License: Expat
 
 Files: mne/externals/tempita/*
 Copyright: 2008 Ian Bicking and Contributors
-License: MIT
+License: Expat
 
 Files: debian/JS/bootstrap
 Copyright: 2011-2014 Twitter, Inc.
-License: MIT
+License: Expat
 
 Files: mne/html/bootstrap*
 Copyright: 2013 Twitter, Inc.
@@ -70,17 +70,17 @@ License: Apache
 
 Files: mne/html/jquery*
 Copyright: 2005, 2013 jQuery Foundation, Inc.
-License: MIT
+License: Expat
 
 Files: mne/html/d3*
 Copyright: 2013 Mike Bostock.
-License: BSD-3
+License: BSD-3-Clause
 
 Files: mne/html/mpld3*
 Copyright: 2013, Jake Vanderplas
-License: BSD-3
+License: BSD-3-Clause
 
-License: BSD
+License: BSD-2-Clause
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions are
   met:
@@ -105,7 +105,7 @@ License: BSD
   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH
   DAMAGE.
 
-License: BSD-3
+License: BSD-3-Clause
   Redistribution and use in source and binary forms, with or without modification,
   are permitted provided that the following conditions are met:
   .
@@ -130,7 +130,7 @@ License: BSD-3
   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-License: MIT
+License: Expat
   Permission is hereby granted, free of charge, to any person obtaining a copy
   of this software and associated documentation files (the "Software"), to deal
   in the Software without restriction, including without limitation the rights
