@@ -9,11 +9,11 @@ Build-Depends: debhelper (>= 10),
                python-all,
                python-numpy,
                python-scipy,
-               python-sphinx (>= 1.0~),
+               python-sphinx,
                python-nose,
                python-setuptools,
                python-matplotlib,
-               python-joblib (>= 0.4.5),
+               python-joblib,
                python-sklearn,
                mayavi2 (>= 4.4.3~) | python-vtk6 | python-vtk,
                xvfb,
@@ -22,10 +22,10 @@ Build-Depends: debhelper (>= 10),
                python-coverage,
                libjs-jquery,
                libjs-jquery-ui,
-               yui-compressor,
+               yui-compressor
 Standards-Version: 3.9.8
-Vcs-Browser: http://anonscm.debian.org/gitweb/?p=debian-med/python-mne.git
-Vcs-Git: git://anonscm.debian.org/debian-med/python-mne.git
+Vcs-Browser: https://anonscm.debian.org/cgit/debian-med/python-mne.git
+Vcs-Git: https://anonscm.debian.org/git/debian-med/python-mne.git
 Homepage: http://martinos.org/mne
 X-Python-Version: >= 2.7
 
@@ -37,13 +37,13 @@ Depends: ${misc:Depends},
          python-scipy,
          python-sklearn,
          python-matplotlib,
-         python-joblib (>= 0.4.5),
+         python-joblib,
          xvfb,
          xauth,
          libgl1-mesa-dri,
          help2man,
          libjs-jquery,
-         libjs-jquery-ui,
+         libjs-jquery-ui
 Recommends: python-nose,
             mayavi2
 Suggests: python-dap,
