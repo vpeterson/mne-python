@@ -5,7 +5,7 @@ Uploaders: Alexandre Gramfort <alexandre.gramfort@m4x.org>,
            Michael Hanke <michael.hanke@gmail.com>
 Section: python
 Priority: optional
-Build-Depends: debhelper (>= 9),
+Build-Depends: debhelper (>= 10),
                python-all,
                python-numpy,
                python-scipy,
