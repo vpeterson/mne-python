@@ -1,3 +1,12 @@
+python-mne (0.13.1+dfsg-2) UNRELEASED; urgency=medium
+
+  * Team upload.
+  * Fix corrupted bootstrap.min.js when built with dash as /bin/sh
+    (Thanks for the patch to Chris Lamb <lamby@debian.org>)
+    Closes: #852518
+
+ -- Andreas Tille <tille@debian.org>  Wed, 25 Jan 2017 09:27:57 +0100
+
 python-mne (0.13.1+dfsg-1) unstable; urgency=medium
 
   * Fresh upstream bugfix release
