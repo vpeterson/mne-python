@@ -392,6 +392,7 @@ def reset_warnings(gallery_conf, fname):
     warnings.filterwarnings(  # realtime
         'ignore', message=".*unclosed file.*", category=ResourceWarning)
     warnings.filterwarnings('ignore', message='Exception ignored in.*')
+    warnings.filterwarnings('ignore', message='.*individual lines on a stem.*')
     # allow this ImportWarning, but don't show it
     warnings.filterwarnings(
         'ignore', message="can't resolve package from", category=ImportWarning)
