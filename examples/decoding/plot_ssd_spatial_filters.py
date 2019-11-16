@@ -97,7 +97,7 @@ plt.figure()
 plt.plot(pow_ratio, color='black')
 plt.plot(pow_ratio[sorter], color='orange', label='sorted eigenvalues')
 plt.xlabel("Eigenvalue Index")
-plt.ylabel(r"Power Ratio $\frac{P_f}{P_{sf}}$")
+plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
 plt.axhline(1, linestyle='--')
 
