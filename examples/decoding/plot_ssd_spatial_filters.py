@@ -32,7 +32,6 @@ from mne.utils import _time_mask
 from mne.channels import read_layout
 
 
-
 def freq_mask(freqs, fmin, fmax):
     """convenience function to select frequencies"""
     return _time_mask(freqs, fmin, fmax)
@@ -64,21 +63,17 @@ events = mne.make_fixed_length_events(raw, id=1, duration=.250)
 # Epoch length is 1.5 second
 picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
 epochs_sig = Epochs(raw_sig, events, tmin=0., tmax=1.500, baseline=None,
-                    picks=picks,
-                    detrend=1, decim=4)
+                    picks=picks, detrend=1, decim=4)
 
 epochs_noise = Epochs(raw_noise, events, tmin=0., tmax=1.500, baseline=None,
-                      picks=picks,
-                      detrend=1, decim=4)
+                      picks=picks, detrend=1, decim=4)
 
 cov_sig = mne.compute_covariance(epochs_sig, method='oas')
 cov_noise = mne.compute_covariance(epochs_noise, method='oas')
 
-
 vals, vecs = eigh(cov_sig.data, cov_noise.data)
 
-
-ssd_sources = vecs.T @ raw._data[picks]
+ssd_sources = np.dot(vecs.T, raw._data[picks])
 
 psd, freqs = mne.time_frequency.psd_array_welch(
     ssd_sources, sfreq=raw.info['sfreq'], n_fft=4096)
@@ -106,9 +101,9 @@ plt.ylabel(r"Power Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
 plt.axhline(1, linestyle='--')
 
-# Let's investigate spatila filter with max power ratio
-# We willl first inspect the topographies
-# According to Nikulin et al 2011 this is done
+# Let's investigate spatila filter with max power ratio.
+# We willl first inspect the topographies.
+# According to Nikulin et al 2011 this is done.
 # by either inverting the filters (W^{-1}) or by multiplying the noise
 # cov with the filters Eq. (22) (C_n W)^t.
 # We'll explore both approaches to be sure all is fine.
@@ -122,7 +117,7 @@ pattern1 = mne.EvokedArray(
 pattern1.plot_topomap(times=[0.], units=dict(mag='A.U.'),
                       time_format='', layout=layout)
 
-A2 = (cov_noise.data @ vecs).T
+A2 = np.dot(cov_noise.data, vecs).T
 pattern2 = mne.EvokedArray(
     data=A2[max_idx, np.newaxis].T, info=epochs_sig.info)
 pattern2.plot_topomap(times=[0.], units=dict(mag='A.U.'),
@@ -130,10 +125,10 @@ pattern2.plot_topomap(times=[0.], units=dict(mag='A.U.'),
 
 assert np.allclose(A1, A2)
 
-# The topographies suggest that we picked up a parietal alpha generator
+# The topographies suggest that we picked up a parietal alpha generator.
 
 # Let's also look at tbe power spectrum of that source and compare it to
-# to the power spectrum of the source with lowest SNR
+# to the power spectrum of the source with lowest SNR.
 
 min_idx = pow_ratio.argsort()[0]
 
@@ -148,4 +143,3 @@ plt.legend()
 
 # We can clearly see that the selected component enjoyes an SNR that is
 # way above the average powe spectrum.
-# The component on the bottom is mostly dominated by non-oscillatory signals.
