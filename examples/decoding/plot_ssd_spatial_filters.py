@@ -30,6 +30,7 @@ from mne import Epochs
 from mne.datasets.fieldtrip_cmc import data_path
 from mne.utils import _time_mask
 from mne.channels import read_layout
+from mne.decoding import TransformerMixin, BaseEstimator
 
 
 def freq_mask(freqs, fmin, fmax):
@@ -44,39 +45,97 @@ raw.crop(50., 250.).load_data()  # crop for memory purposes
 freqs_sig = 9, 12
 freqs_noise = 8, 13
 
-# Filter MEG data to focus on beta band
-raw.pick_types(meg=True, ref_meg=True, eeg=False, eog=False)
-raw_sig = raw.copy()
-raw_sig.filter(*freqs_sig, l_trans_bandwidth=1, h_trans_bandwidth=1,
-               fir_design='firwin')
 
-raw_noise = raw.copy()
-raw_noise.filter(*freqs_noise, l_trans_bandwidth=1, h_trans_bandwidth=1,
-                 fir_design='firwin')
+class SSD(BaseEstimator, TransformerMixin):
+    """Implement Spatio-Spectral Decomposision
 
-# remove signal from noise to further increase impact of surrounding freqs
-raw_noise._data -= raw_sig._data
+    Parameters
+    ----------
+    filt_params_signal : dict
+        Filtering for the frequencies of interst.
+    filt_params_noise  : dict
+        Filtering for the frequencies of non-interest.
+    estimator : str
+        Which covariance estimator to use. Defaults to "oas".
+    n_components  : int, None
+        How many components to keep. Default to 5.
+    subtract_signal : bool
+        Whether to subtract the noise from the signal to enhcane
+        sptial filter.
+    sort_by_spectral_ratio : bool
+        Whether to sort by the spectral ratio. Defaults to True.
 
-# Build epochs as sliding windows over the continuous raw file
-events = mne.make_fixed_length_events(raw, id=1, duration=.250)
+    """
 
-# Epoch length is 1.5 second
-picks = mne.pick_types(raw.info, meg=True, ref_meg=False)
-epochs_sig = Epochs(raw_sig, events, tmin=0., tmax=1.500, baseline=None,
-                    picks=picks, detrend=1, decim=4)
+    def __init__(self, filt_params_signal, filt_params_noise,
+                 estimator='oas', n_components=None,
+                 subtract_signal=True,
+                 reject=None,
+                 flat=None,
+                 picks=None,
+                 sort_by_spectral_ratio=True):
+        """Initialize instance"""
 
-epochs_noise = Epochs(raw_noise, events, tmin=0., tmax=1.500, baseline=None,
-                      picks=picks, detrend=1, decim=4)
+        dicts = {"signal": filt_params_signal, "noise": filt_params_noise}
+        for param, dd in [('l', 0), ('h', 0), ('l', 1), ('h', 1)]:
+            key = ('signal', 'noise')[dd]
+            if  param + '_freq' not in dicts[key]:
+                raise ValueError(
+                    "'%' must be defined in filter parameters for %s" % key)
+            val = dicts[key][param + '_freq']
+            if not isinstance(val, (int, float)):
+                raise ValueError(
+                    "Frequencies must be numbers, got %s" % type(val))
 
-cov_sig = mne.compute_covariance(epochs_sig, method='oas')
-cov_noise = mne.compute_covariance(epochs_noise, method='oas')
+        self.freqs_signal = (filt_params_signal['l_freq'],
+                             filt_params_signal['h_freq'])
+        self.freqs_noise = (filt_params_noise['l_freq'],
+                            filt_params_noise['h_freq'])
+        self.filt_params_signal = filt_params_signal
+        self.filt_params_noise = filt_params_noise
+        self.subtract_signal = subtract_signal
+        self.picks = picks
+        self.estimator = estimator
+        self.n_components = n_components
 
-vals, vecs = eigh(cov_sig.data, cov_noise.data)
+    def fit(self, inst):
+        """Fit"""
+        if self.picks == None:
+            self.picks_ = mne.pick_types(inst.info, meg=True, eeg=False, ref_meg=False)
+        else:
+            self.picks_ = self.picks
+        if isinstance(inst, mne.io.base.BaseRaw):
+            inst_signal = inst.copy()
+            inst_signal.filter(picks=self.picks_, **self.filt_params_signal)
 
-ssd_sources = np.dot(vecs.T, raw._data[picks])
+            inst_noise = inst.copy()
+            inst_noise.filter(picks=self.picks_, **self.filt_params_noise)
+            if self.subtract_signal:
+                inst_noise._data[self.picks_] -= inst_signal._data[self.picks_]
+            cov_signal = mne.compute_raw_covariance(
+                inst_signal, picks=self.picks_, method=self.estimator)
+            cov_noise = mne.compute_raw_covariance(inst_noise, picks=self.picks_,
+                method=self.estimator)
+            del inst_noise
+            del inst_signal
+        else:
+            raise NotImplementedError()
 
-psd, freqs = mne.time_frequency.psd_array_welch(
-    ssd_sources, sfreq=raw.info['sfreq'], n_fft=4096)
+        self.eigvals_, self.filters_ = eigh(cov_signal.data, cov_noise.data)
+        self.patterns_ = np.linalg.pinv(self.filters_)
+
+    def transform(self, data):
+        if self.n_components is None:
+            n_components = len(self.picks_)
+        else:
+            n_components = self.n_components
+        return np.dot(self.filters_.T[:n_components], data[self.picks_])
+
+    def apply(self, instance):
+        pass
+
+    def inverse_transform(self):
+        raise NotImplementedError()
 
 
 def spectral_ratio_ssd(psd, freqs, freqs_sig, freqs_noise):
@@ -88,14 +147,30 @@ def spectral_ratio_ssd(psd, freqs, freqs_sig, freqs_noise):
     ratio = psd[:, sig_idx].mean(axis=1) / psd[:, noise_idx].mean(axis=1)
     return ratio
 
-pow_ratio = spectral_ratio_ssd(psd, freqs, freqs_sig, freqs_noise)
 
-sorter = pow_ratio.argsort()
+ssd = SSD(filt_params_signal=dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
+                                  l_trans_bandwidth=1, h_trans_bandwidth=1,
+                                  fir_design='firwin'),
+          filt_params_noise=dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
+                                  l_trans_bandwidth=1, h_trans_bandwidth=1,
+                                  fir_design='firwin'))
+
+ssd.fit(raw.copy().crop(0, 120))
+
+
+ssd_sources = ssd.transform(raw.get_data())
+
+psd, freqs = mne.time_frequency.psd_array_welch(
+    ssd_sources, sfreq=raw.info['sfreq'], n_fft=4096)
+
+spec_ratio = spectral_ratio_ssd(psd, freqs, freqs_sig, freqs_noise)
+
+sorter = spec_ratio.argsort()
 
 # plot spectral ratio (see Eq. 24 in Nikulin 2011)
 plt.figure()
-plt.plot(pow_ratio, color='black')
-plt.plot(pow_ratio[sorter], color='orange', label='sorted eigenvalues')
+plt.plot(spec_ratio, color='black')
+plt.plot(spec_ratio[sorter], color='orange', label='sorted eigenvalues')
 plt.xlabel("Eigenvalue Index")
 plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
@@ -106,35 +181,30 @@ plt.axhline(1, linestyle='--')
 # According to Nikulin et al 2011 this is done.
 # by either inverting the filters (W^{-1}) or by multiplying the noise
 # cov with the filters Eq. (22) (C_n W)^t.
-# We'll explore both approaches to be sure all is fine.
+# We rely on the inversion apprpach here.
 
-max_idx = pow_ratio.argsort()[-1]
+
+max_idx = spec_ratio.argsort()[::-1][:4]
 layout = read_layout('CTF151.lay')
 
-A1 = np.linalg.pinv(vecs)
-pattern1 = mne.EvokedArray(
-    data=A1[max_idx, np.newaxis].T, info=epochs_sig.info)
-pattern1.plot_topomap(times=[0.], units=dict(mag='A.U.'),
-                      time_format='', layout=layout)
+pattern = mne.EvokedArray(
+    data=np.linalg.pinv(ssd.filters_)[max_idx, :].T,
+    info=mne.pick_info(raw.info, ssd.picks_))
 
-A2 = np.dot(cov_noise.data, vecs).T
-pattern2 = mne.EvokedArray(
-    data=A2[max_idx, np.newaxis].T, info=epochs_sig.info)
-pattern2.plot_topomap(times=[0.], units=dict(mag='A.U.'),
-                      time_format='', layout=layout)
+pattern.plot_topomap(units=dict(mag='A.U.'),
+                     time_format='', layout=layout)
 
-assert np.allclose(A1, A2)
 
 # The topographies suggest that we picked up a parietal alpha generator.
 
 # Let's also look at tbe power spectrum of that source and compare it to
 # to the power spectrum of the source with lowest SNR.
 
-min_idx = pow_ratio.argsort()[0]
+min_idx = spec_ratio.argsort()[0]
 
 below50 = freq_mask(freqs, 0, 50)
 plt.figure()
-plt.loglog(freqs[below50], psd[max_idx, below50], label='max SNR')
+plt.loglog(freqs[below50], psd[max_idx[0], below50], label='max SNR')
 plt.loglog(freqs[below50], psd[min_idx, below50], label='min SNR')
 plt.loglog(freqs[below50], psd[:, below50].mean(axis=0), label='mean')
 plt.xlabel("log(frequency)")
