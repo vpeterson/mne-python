@@ -21,7 +21,7 @@ from mne.io.compensator import set_current_comp
 from mne.minimum_norm import make_inverse_operator, apply_inverse
 from mne.simulation import simulate_evoked
 from mne.utils import (run_tests_if_main, object_diff, requires_h5py,
-                       catch_logging, _reg_pinv)
+                       catch_logging)
 
 
 data_path = testing.data_path(download=False)
@@ -465,7 +465,7 @@ def test_make_lcmv_sphere(pick_ori, weight_norm):
     max_stc = stc_sphere.data[idx]
     tmax = stc_sphere.times[np.argmax(max_stc)]
     assert 0.08 < tmax < 0.15, tmax
-    min_, max_ = 0.4, 3.0
+    min_, max_ = 1.0, 4.0
     if weight_norm is None:
         min_ *= 2e-7
         max_ *= 2e-7
@@ -698,78 +698,6 @@ def test_lcmv_ctf_comp():
         make_lcmv(info_comp, fwd, data_cov)
 
 
-@testing.requires_testing_data  # formula does not work for vector!
-@pytest.mark.parametrize('pick_ori', ['max-power', 'normal'])
-@pytest.mark.parametrize('reg', (0.05, 0.))
-@pytest.mark.parametrize('weight_norm', [
-    'unit-noise-gain-pooled',
-    'unit-noise-gain-old',
-    'unit-noise-gain-sqrtm',
-    'unit-noise-gain',
-])
-def test_unit_noise_gain_formula(pick_ori, reg, weight_norm):
-    """Test unit-noise-gain filter against formula."""
-    # The unit-noise-gain beamformer is computed following a shortcut, where
-    # W_ung = inv(sqrt(W_ug @ W_ug.T)) @ W_ug
-    # with W_ung referring to the unit-noise-gain (weight normalized) filter
-    # and W_ug referring to the above-calculated unit-gain filter stored in W.
-    # Here, we check that the formulation in Sekihara & Nagarajan still holds.
-    raw = mne.io.read_raw_fif(fname_raw, preload=True)
-    events = mne.find_events(raw)
-    raw.pick_types(meg='mag')
-    # assert len(raw.ch_names) == 305
-    epochs = mne.Epochs(raw, events, None, preload=True)
-
-    # with pytest.warns(RuntimeWarning, match='Too few samples'):
-    data_cov = mne.compute_covariance(epochs, tmin=0.04, tmax=0.15)
-
-    noise_cov = None  # no whitening to make things easier
-    forward = mne.read_forward_solution(fname_fwd)
-    convert_forward_solution(forward, surf_ori=True, copy=False)
-
-    # compute the unit-noise-gain scalar beamformer
-    rank = None
-    # TODO: Decide if we should actually use unit-noise-gain here...
-    filters = make_lcmv(epochs.info, forward, data_cov, reg=reg,
-                        noise_cov=noise_cov, pick_ori=pick_ori,
-                        weight_norm=weight_norm, rank=rank)
-
-    # manipulate forward to have same orientation picking as above
-    forward = mne.pick_types_forward(forward, meg='mag')  # restrict to MAG
-    fwd_sol = forward['sol']['data'].T
-    n_sources, n_channels = forward['nsource'], forward['nchan']
-    fwd_sol = np.reshape(fwd_sol, (n_sources, 3, n_channels))
-    fwd_sol = fwd_sol.transpose(0, 2, 1)
-    if pick_ori == 'normal':
-        fwd_sol = fwd_sol[:, :, 2:3]
-        n_orient = 1
-    elif pick_ori == 'max-power':
-        fwd_sol = np.matmul(fwd_sol, filters['max_power_ori'][..., np.newaxis])
-        n_orient = 1
-    else:
-        assert pick_ori == 'vector'
-        n_orient = 3
-    assert fwd_sol.shape == (498, 102, n_orient)
-
-    # compute the inverse of the covariance matrix and square it
-    Cm_inv, _, _ = _reg_pinv(data_cov.data, reg, rank)
-
-    # compute the unit-noise-gain beamformer in pedestrian mode:
-    # formula: G.T @ Cm_inv / sqrt(G.T @ Cm_inv @ Cm_inv @ G)
-    # Sekihara & Nagarajan 2008, eq. 4.15
-    ung_numer = np.matmul(fwd_sol.transpose(0, 2, 1), Cm_inv)
-    ung_denom = np.linalg.norm(ung_numer, axis=(1, 2))
-    assert ung_denom.shape == (n_sources,)
-    W_ung_direct = ung_numer / ung_denom[:, np.newaxis, np.newaxis]
-    W_ung = filters['weights']
-    assert W_ung.shape == (n_sources * n_orient, n_channels)
-    W_ung = W_ung.reshape(n_sources, n_orient, n_channels)
-    assert W_ung_direct.shape == W_ung.shape
-
-    assert 1e-2 < np.mean(np.abs(W_ung)) < 1  # ensure our atol is okay
-    assert_allclose(W_ung, W_ung_direct, atol=1e-10)
-
-
 @testing.requires_testing_data
 @pytest.mark.parametrize('proj', [False, True])
 @pytest.mark.parametrize('weight_norm', (None, 'nai', 'unit-noise-gain'))
@@ -834,7 +762,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     if weight_norm == 'nai':
         # NAI is always normalized by noise-level (based on eigenvalues)
         for stc in (stc_nocov, stc_cov):
-            assert_allclose(stc.data.std(), 0.39, rtol=0.1)
+            assert_allclose(stc.data.std(), 0.584, rtol=0.1)
     elif weight_norm is None:
         # None always represents something not normalized, reflecting channel
         # weights
@@ -843,8 +771,8 @@ def test_lcmv_reg_proj(proj, weight_norm):
     else:
         assert weight_norm == 'unit-noise-gain'
         # Channel scalings depend on presence of noise_cov
-        assert_allclose(stc_nocov.data.std(), 5.3e-13, rtol=0.1)
-        assert_allclose(stc_cov.data.std(), 0.13, rtol=0.1)
+        assert_allclose(stc_nocov.data.std(), 7.8e-13, rtol=0.1)
+        assert_allclose(stc_cov.data.std(), 0.187, rtol=0.1)
 
 
 @pytest.mark.parametrize('reg, weight_norm, use_cov, depth, lower, upper', [
@@ -877,31 +805,23 @@ def test_localization_bias_fixed(bias_params_fixed, reg, weight_norm, use_cov,
 
 @pytest.mark.parametrize(
     'reg, pick_ori, weight_norm, use_cov, depth, lower, upper', [
-        (0.05, 'vector', 'unit-noise-gain-pooled', False, None, 36, 38),
-        (0.05, 'vector', 'unit-noise-gain-pooled', True, None, 50, 53),
-        (0.05, 'vector', 'unit-noise-gain-sqrtm', True, None, 40, 42),
-        (0.05, 'vector', 'unit-noise-gain-old', True, None, 37, 38),
-        (0.05, 'vector', 'unit-noise-gain', True, None, 35, 37),
-        (0.05, 'vector', 'nai', True, None, 35, 37),
+        (0.05, 'vector', 'unit-noise-gain', False, None, 26, 28),
+        (0.05, 'vector', 'unit-noise-gain', True, None, 40, 42),
+        (0.05, 'vector', 'nai', True, None, 40, 42),
         (0.05, 'vector', None, True, None, 12, 14),
         (0.05, 'vector', None, True, 0.8, 39, 43),
-        (0.05, 'max-power', 'unit-noise-gain-pooled', False, None, 17, 20),
-        (0.05, 'max-power', 'unit-noise-gain-sqrtm', False, None, 17, 20),
         (0.05, 'max-power', 'unit-noise-gain', False, None, 17, 20),
-        (0.05, 'max-power', 'unit-noise-gain', True, None, 21, 24),
         (0.05, 'max-power', 'nai', True, None, 21, 24),
         (0.05, 'max-power', None, True, None, 7, 10),
         (0.05, 'max-power', None, True, 0.8, 15, 18),
         (0.05, None, None, True, 0.8, 40, 42),
         # no reg
         (0.00, 'vector', None, True, None, 24, 32),
-        (0.00, 'vector', 'unit-noise-gain-pooled', True, None, 67, 76),
-        (0.00, 'vector', 'unit-noise-gain-old', True, None, 63, 73),
-        (0.00, 'vector', 'unit-noise-gain', True, None, 50, 62),
-        (0.00, 'vector', 'nai', True, None, 50, 62),
+        (0.00, 'vector', 'unit-noise-gain', True, None, 52, 65),
+        (0.00, 'vector', 'nai', True, None, 52, 65),
         (0.00, 'max-power', None, True, None, 15, 19),
+        (0.00, 'max-power', 'unit-noise-gain', True, None, 43, 50),
         (0.00, 'max-power', 'nai', True, None, 43, 50),
-        (0.00, 'max-power', 'unit-noise-gain-pooled', True, None, 43, 50),
     ])
 def test_localization_bias_free(bias_params_free, reg, pick_ori, weight_norm,
                                 use_cov, depth, lower, upper):

@@ -142,6 +142,9 @@ def sqrtm_sym(A, rcond=1e-7, inv=False):
         The array to take the square root of.
     rcond : float
         The relative condition number used during reconstruction.
+    inv : bool
+        If True, compute the inverse of the square root rather than the
+        square root itself.
 
     Returns
     -------
@@ -152,7 +155,7 @@ def sqrtm_sym(A, rcond=1e-7, inv=False):
     """
     # Same as linalg.sqrtm(C) but faster, also yields the eigenvalues
     s, u = np.linalg.eigh(A)  # eigenvalues in ascending order
-    s[s < s[..., -1:] * rcond] = np.inf if inv else 0
+    s[s <= s[..., -1:] * rcond] = np.inf if inv else 0
     np.sqrt(s, out=s)
     if inv:
         use_s = 1. / s
