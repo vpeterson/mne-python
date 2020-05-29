@@ -435,6 +435,7 @@ class CrossSpectralDensity(object):
             tmax=self.tmax,
             frequencies=np.atleast_1d(self.frequencies)[sel].tolist(),
             n_fft=self.n_fft,
+            projs=self.projs,
         )
 
     def save(self, fname):
