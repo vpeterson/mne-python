@@ -251,7 +251,7 @@ class CrossSpectralDensity(object):
         csd_out = CrossSpectralDensity(data=new_data, ch_names=self.ch_names,
                                        tmin=self.tmin, tmax=self.tmax,
                                        frequencies=new_frequencies,
-                                       n_fft=self.n_fft)
+                                       n_fft=self.n_fft, projs=self.projs)
         return csd_out
 
     def mean(self, fmin=None, fmax=None):
@@ -406,6 +406,7 @@ class CrossSpectralDensity(object):
         self.ch_names = state['ch_names']
         self.frequencies = state['frequencies']
         self.n_fft = state['n_fft']
+        self.projs = state['projs']
 
     def __getstate__(self):  # noqa: D105
         return dict(
@@ -415,6 +416,7 @@ class CrossSpectralDensity(object):
             ch_names=self.ch_names,
             frequencies=self.frequencies,
             n_fft=self.n_fft,
+            projs=self.projs,
         )
 
     def __getitem__(self, sel):  # noqa: D105
@@ -465,6 +467,7 @@ class CrossSpectralDensity(object):
             A copy of the object.
         """
         return cp.deepcopy(self)
+
 
     def pick_channels(self, ch_names, ordered=False):
         """Pick channels from this cross-spectral density matrix.
