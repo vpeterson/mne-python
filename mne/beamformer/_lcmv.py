@@ -28,7 +28,7 @@ from ._compute_beamformer import (
 @verbose
 def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
               pick_ori=None, rank='info', weight_norm='unit-noise-gain',
-              reduce_rank=False, depth=None, inversion='matrix', verbose=None):
+              reduce_rank=False, depth=None, verbose=None):
     """Compute LCMV spatial filter.
 
     Parameters
@@ -162,7 +162,7 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
     n_orient = 3 if is_free_ori else 1
     W, max_power_ori = _compute_beamformer(
         G, Cm, reg, n_orient, weight_norm, pick_ori, reduce_rank, rank_int,
-        inversion=inversion, nn=nn, orient_std=orient_std)
+        inversion='matrix', nn=nn, orient_std=orient_std)
 
     # get src type to store with filters for _make_stc
     src_type = _get_src_type(forward['src'], vertno)
@@ -183,6 +183,18 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
         rank=rank_int, max_power_ori=max_power_ori)
 
     return filters
+
+
+def _proj_data(M, proj, filters):
+    if filters['is_ssp']:
+        # check whether data and filter projs match
+        _check_proj_match(proj, filters)
+        if filters['whitener'] is None:
+            M = np.dot(filters['proj'], M)
+
+    if filters['whitener'] is not None:
+        M = np.dot(filters['whitener'], M)
+    return M
 
 
 def _apply_lcmv(data, filters, info, tmin, max_ori_out):
@@ -206,14 +218,7 @@ def _apply_lcmv(data, filters, info, tmin, max_ori_out):
         if not return_single:
             logger.info("Processing epoch : %d" % (i + 1))
 
-        if filters['is_ssp']:
-            # check whether data and filter projs match
-            _check_proj_match(info, filters)
-            if filters['whitener'] is None:
-                M = np.dot(filters['proj'], M)
-
-        if filters['whitener'] is not None:
-            M = np.dot(filters['whitener'], M)
+        M = _proj_data(M, info['projs'], filters)
 
         # project to source space using beamformer weights
         vector = False
@@ -416,12 +421,11 @@ def apply_lcmv_cov(data_cov, filters, verbose=None):
     data_cov = pick_channels_cov(data_cov, sel_names)
 
     n_orient = filters['weights'].shape[0] // filters['nsource']
-
-    # Whiten the CSD
-    whitener = filters['whitener']
-    Cm = np.dot(whitener, np.dot(data_cov['data'], whitener.conj().T))
-
-    source_power = _compute_power(Cm, filters['weights'], n_orient)
+    # Need to project and whiten along both dimensions
+    data = _proj_data(data_cov['data'].T, data_cov['projs'], filters)
+    data = _proj_data(data.T, data_cov['projs'], filters)
+    del data_cov
+    source_power = _compute_power(data, filters['weights'], n_orient)
 
     # compatibility with 0.16, add src_type as None if not present:
     filters, warn_text = _check_src_type(filters)
