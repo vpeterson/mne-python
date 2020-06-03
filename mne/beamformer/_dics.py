@@ -86,15 +86,13 @@ def make_dics(info, forward, csd, reg=0.05, noise_csd=None, label=None,
     %(weight_norm)s
 
         Defaults to ``None``, in which case no normalization is performed.
-    normalize_fwd : bool
-        Whether to normalize the forward solution. Defaults to ``True``. Note
-        that this normalization is not required when weight normalization
-        (``weight_norm``) is used.
     %(depth)s
     real_filter : bool
         If ``True``, take only the real part of the cross-spectral-density
         matrices to compute real filters. Defaults to ``False``.
     %(reduce_rank)s
+    normalize_fwd : bool
+        Deprecated, use ``depth`` instead.
     %(verbose)s
 
     Returns
@@ -162,7 +160,10 @@ def make_dics(info, forward, csd, reg=0.05, noise_csd=None, label=None,
     ----------
     .. footbibliography::
     """  # noqa: E501
-    # TODO: Add `'vector'` option
+    if normalize_fwd is not None:
+        warn('normalize_fwd is deprecated and will be removed in 0.22, use '
+             'depth instead', DeprecationWarning)
+        depth = 1. if normalize_fwd else 0.
     rank = _check_rank(rank)
     _check_option('pick_ori', pick_ori, [None, 'normal', 'max-power'])
     _check_option('inversion', inversion, ['single', 'matrix'])
@@ -180,12 +181,12 @@ def make_dics(info, forward, csd, reg=0.05, noise_csd=None, label=None,
         if len(noise_csd.frequencies) > 1:
             noise_csd = noise_csd.mean()
         noise_csd = noise_csd.get_data(as_cov=True)
-
-        # We only use the real component for whitening to prevent the leadfield
-        # from becoming complex.
-        noise_csd['data'] = noise_csd['data'].real
+        if real_filter:
+            noise_csd['data'] = noise_csd['data'].real
 
     depth = _check_depth(depth, 'depth_sparse')
+    if inversion == 'single':
+        depth['combine_xyz'] = False
 
     _, _, proj, vertices, G, whitener, nn, orient_std = \
         _prepare_beamformer_input(
@@ -475,8 +476,8 @@ def tf_dics(epochs, forward, noise_csds, tmin, tmax, tstep, win_lengths,
             frequencies=None, n_ffts=None, mt_bandwidths=None,
             mt_adaptive=False, mt_low_bias=True, cwt_n_cycles=7, decim=1,
             reg=0.05, label=None, pick_ori=None, rank=None, inversion='single',
-            weight_norm=None, normalize_fwd=True, real_filter=False,
-            reduce_rank=False, verbose=None):
+            weight_norm=None, depth=1., real_filter=False,
+            reduce_rank=False, normalize_fwd=None, verbose=None):
     """5D time-frequency beamforming based on DICS.
 
     Calculate source power in time-frequency windows using a spatial filter
@@ -592,14 +593,13 @@ def tf_dics(epochs, forward, noise_csds, tmin, tmax, tstep, win_lengths,
         performed.  If 'unit-noise-gain', the unit-noise gain minimum variance
         beamformer will be computed (Borgiotti-Kaplan beamformer)
         :footcite:`SekiharaNagarajan2008`. Defaults to ``None``.
-    normalize_fwd : bool
-        Whether to normalize the forward solution. Defaults to ``True``. Note
-        that this normalization is not required when weight normalization
-        (``weight_norm``) is used.
+    %(depth)s
     real_filter : bool
         If ``True``, take only the real part of the cross-spectral-density
         matrices to compute real filters. Defaults to ``False``.
     %(reduce_rank)s
+    normalize_fwd : bool
+        Deprecated, use ``depth`` instead.
     %(verbose)s
 
     Returns
@@ -744,7 +744,7 @@ def tf_dics(epochs, forward, noise_csds, tmin, tmax, tstep, win_lengths,
                 filters = make_dics(epochs.info, forward, csd, reg=reg,
                                     label=label, pick_ori=pick_ori,
                                     rank=rank, inversion=inversion,
-                                    weight_norm=weight_norm,
+                                    weight_norm=weight_norm, depth=depth,
                                     normalize_fwd=normalize_fwd,
                                     reduce_rank=reduce_rank,
                                     real_filter=real_filter, verbose=False)

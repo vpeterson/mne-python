@@ -15,10 +15,14 @@ from mne.datasets import testing
 from mne.beamformer import (make_dics, apply_dics, apply_dics_epochs,
                             apply_dics_csd, tf_dics, read_beamformer,
                             Beamformer)
+from mne.beamformer._compute_beamformer import _prepare_beamformer_input
 from mne.time_frequency import csd_morlet
 from mne.utils import run_tests_if_main, object_diff, requires_h5py
 from mne.proj import compute_proj_evoked, make_projector
 from mne.surface import _compute_nearest
+from mne.beamformer.tests.test_lcmv import _assert_weight_norm
+from mne.time_frequency import CrossSpectralDensity
+from mne.time_frequency.csd import _sym_mat_to_vector
 
 data_path = testing.data_path(download=False)
 fname_raw = op.join(data_path, 'MEG', 'sample', 'sample_audvis_trunc_raw.fif')
@@ -102,15 +106,6 @@ def _simulate_data(fwd, idx):  # Somewhere on the frontal lobe by default
     return epochs, evoked, csd, source_vertno, label, vertices, source_ind
 
 
-def _test_weight_norm(filters, norm=None):
-    """Test weight normalization."""
-    norm = filters['n_orient'] if norm is None else norm
-    for ws in filters['weights']:
-        ws = ws.reshape(-1, filters['n_orient'], ws.shape[1])
-        for w in ws:
-            assert_allclose(np.trace(w.dot(w.conjugate().T)), norm)
-
-
 idx_param = pytest.mark.parametrize('idx', [0, 100, 200, 233])
 
 
@@ -118,7 +113,8 @@ idx_param = pytest.mark.parametrize('idx', [0, 100, 200, 233])
 @testing.requires_testing_data
 @requires_h5py
 @idx_param
-def test_make_dics(tmpdir, _load_forward, idx):
+@pytest.mark.parametrize('whiten', (False, True))
+def test_make_dics(tmpdir, _load_forward, idx, whiten):
     """Test making DICS beamformer filters."""
     # We only test proper handling of parameters here. Testing the results is
     # done in test_apply_dics_timeseries and test_apply_dics_csd.
@@ -126,39 +122,58 @@ def test_make_dics(tmpdir, _load_forward, idx):
     fwd_free, fwd_surf, fwd_fixed, fwd_vol = _load_forward
     epochs, _, csd, _, label, vertices, source_ind = \
         _simulate_data(fwd_fixed, idx)
-    with pytest.raises(RuntimeError, match='several sensor types'):
+    with pytest.raises(ValueError, match='several sensor types'):
         make_dics(epochs.info, fwd_surf, csd, label=label, pick_ori=None)
-    epochs.pick_types(meg='grad')
+    if whiten:
+        rng = np.random.RandomState(0)
+        scales = mne.make_ad_hoc_cov(epochs.info).data
+        n = scales.size
+        # Some random complex correlation structure (with channel scalings)
+        data = rng.randn(n, n) + 1j * rng.randn(n, n)
+        data = data @ data.conj().T
+        data *= scales
+        data *= scales[:, np.newaxis]
+        data.flat[::n + 1] = scales
+        noise_csd = CrossSpectralDensity(
+            _sym_mat_to_vector(data), epochs.ch_names, 0., csd.n_fft)
+    else:
+        noise_csd = None
+        epochs.pick_types(meg='grad')
 
     with pytest.raises(ValueError, match="Invalid value for the 'pick_ori'"):
-        make_dics(epochs.info, fwd_fixed, csd, pick_ori="notexistent")
+        make_dics(epochs.info, fwd_fixed, csd, pick_ori="notexistent",
+                  noise_csd=noise_csd)
     with pytest.raises(ValueError, match='rank, if str'):
-        make_dics(epochs.info, fwd_fixed, csd, rank='foo')
+        make_dics(epochs.info, fwd_fixed, csd, rank='foo', noise_csd=noise_csd)
     with pytest.raises(TypeError, match='rank must be'):
-        make_dics(epochs.info, fwd_fixed, csd, rank=1.)
+        make_dics(epochs.info, fwd_fixed, csd, rank=1., noise_csd=noise_csd)
 
     # Test if fixed forward operator is detected when picking normal
     # orientation
     with pytest.raises(ValueError, match='forward operator with free ori'):
-        make_dics(epochs.info, fwd_fixed, csd, pick_ori="normal")
+        make_dics(epochs.info, fwd_fixed, csd, pick_ori="normal",
+                  noise_csd=noise_csd)
 
     # Test if non-surface oriented forward operator is detected when picking
     # normal orientation
     with pytest.raises(ValueError, match='oriented in surface coordinates'):
-        make_dics(epochs.info, fwd_free, csd, pick_ori="normal")
+        make_dics(epochs.info, fwd_free, csd, pick_ori="normal",
+                  noise_csd=noise_csd)
 
     # Test if volume forward operator is detected when picking normal
     # orientation
     with pytest.raises(ValueError, match='oriented in surface coordinates'):
-        make_dics(epochs.info, fwd_vol, csd, pick_ori="normal")
+        make_dics(epochs.info, fwd_vol, csd, pick_ori="normal",
+                  noise_csd=noise_csd)
 
     # Test invalid combinations of parameters
     with pytest.raises(ValueError, match='reduce_rank cannot be used with'):
         make_dics(epochs.info, fwd_free, csd, inversion='single',
-                  reduce_rank=True)
-    with pytest.raises(ValueError, match='not stable with depth'):
-        make_dics(epochs.info, fwd_free, csd, weight_norm='unit-noise-gain',
-                  inversion='single', normalize_fwd=True)
+                  reduce_rank=True, noise_csd=noise_csd)
+    # TODO: Restore this?
+    # with pytest.raises(ValueError, match='not stable with depth'):
+    #     make_dics(epochs.info, fwd_free, csd, weight_norm='unit-noise-gain',
+    #               inversion='single', depth=None)
 
     # Sanity checks on the returned filters
     n_freq = len(csd.frequencies)
@@ -169,10 +184,12 @@ def test_make_dics(tmpdir, _load_forward, idx):
     n_channels = len(epochs.ch_names)
     # Test return values
     filters = make_dics(epochs.info, fwd_surf, csd, label=label, pick_ori=None,
-                        weight_norm='unit-noise-gain', normalize_fwd=False)
+                        weight_norm='unit-noise-gain', depth=None,
+                        noise_csd=noise_csd)
     assert filters['weights'].shape == (n_freq, n_verts * n_orient, n_channels)
     assert np.iscomplexobj(filters['weights'])
-    assert filters['csd'] == csd
+    assert filters['csd'].ch_names == epochs.ch_names
+    assert isinstance(filters['csd'], CrossSpectralDensity)
     assert filters['ch_names'] == epochs.ch_names
     assert_array_equal(filters['proj'], np.eye(n_channels))
     assert_array_equal(filters['vertices'][0], vertices)
@@ -181,55 +198,62 @@ def test_make_dics(tmpdir, _load_forward, idx):
     assert filters['pick_ori'] is None
     assert filters['n_orient'] == n_orient
     assert filters['inversion'] == 'single'
-    assert not filters['normalize_fwd']
     assert filters['weight_norm'] == 'unit-noise-gain'
     assert 'DICS' in repr(filters)
     assert 'subject "sample"' in repr(filters)
     assert str(len(vertices)) in repr(filters)
     assert str(n_channels) in repr(filters)
     assert 'rank' not in repr(filters)
-    _test_weight_norm(filters)
+    _, _, _, _, G, _, _, _ = _prepare_beamformer_input(
+        epochs.info, fwd_surf, label, 'vector', combine_xyz=False, exp=None)
+    G.shape = (n_channels, n_verts, n_orient)
+    G = G.transpose(1, 2, 0)  # verts, orient, ch
+
+    _assert_weight_norm(filters, G)
 
     # Test picking orientations. Also test weight norming under these different
     # conditions.
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
                         pick_ori='normal', weight_norm='unit-noise-gain',
-                        normalize_fwd=False)
+                        depth=None, noise_csd=noise_csd)
     n_orient = 1
     assert filters['weights'].shape == (n_freq, n_verts * n_orient, n_channels)
     assert filters['n_orient'] == n_orient
-    _test_weight_norm(filters)
+    _assert_weight_norm(filters, G)
 
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
                         pick_ori='max-power', weight_norm='unit-noise-gain',
-                        normalize_fwd=False)
+                        depth=None, noise_csd=noise_csd)
     n_orient = 1
     assert filters['weights'].shape == (n_freq, n_verts * n_orient, n_channels)
     assert filters['n_orient'] == n_orient
-    _test_weight_norm(filters)
+    _assert_weight_norm(filters, G)
 
     # From here on, only work on a single frequency
     csd = csd[0]
 
     # Test using a real-valued filter
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
-                        pick_ori='normal', real_filter=True)
+                        pick_ori='normal', real_filter=True,
+                        noise_csd=noise_csd)
     assert not np.iscomplexobj(filters['weights'])
 
     # Test forward normalization. When inversion='single', the power of a
     # unit-noise CSD should be 1, even without weight normalization.
-    csd_noise = csd.copy()
-    inds = np.triu_indices(csd.n_channels)
-    # Using [:, :] syntax for in-place broadcasting
-    csd_noise._data[:, :] = np.eye(csd.n_channels)[inds][:, np.newaxis]
-    filters = make_dics(epochs.info, fwd_surf, csd_noise, label=label,
-                        weight_norm=None, normalize_fwd=True)
-    w = filters['weights'][0][:3]
-    assert_allclose(np.diag(w.dot(w.conjugate().T)), 1.0, rtol=1e-6, atol=0)
+    if not whiten:
+        csd_noise = csd.copy()
+        inds = np.triu_indices(csd.n_channels)
+        # Using [:, :] syntax for in-place broadcasting
+        csd_noise._data[:, :] = np.eye(csd.n_channels)[inds][:, np.newaxis]
+        filters = make_dics(epochs.info, fwd_surf, csd_noise, label=label,
+                            weight_norm=None, depth=1., noise_csd=noise_csd)
+        w = filters['weights'][0][:3]
+        assert_allclose(np.diag(w.dot(w.conjugate().T)), 1.0, rtol=1e-6,
+                        atol=0)
 
     # Test turning off both forward and weight normalization
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
-                        weight_norm=None, normalize_fwd=False)
+                        weight_norm=None, depth=None, noise_csd=noise_csd)
     w = filters['weights'][0][:3]
     assert not np.allclose(np.diag(w.dot(w.conjugate().T)), 1.0,
                            rtol=1e-2, atol=0)
@@ -238,11 +262,11 @@ def test_make_dics(tmpdir, _load_forward, idx):
     # version of the unit-noise-gain beamformer.
     filters_nai = make_dics(
         epochs.info, fwd_surf, csd, label=label, pick_ori='max-power',
-        weight_norm='nai', normalize_fwd=False)
+        weight_norm='nai', depth=None, noise_csd=noise_csd)
     w_nai = filters_nai['weights'][0]
     filters_ung = make_dics(
         epochs.info, fwd_surf, csd, label=label, pick_ori='max-power',
-        weight_norm='unit-noise-gain', normalize_fwd=False)
+        weight_norm='unit-noise-gain', depth=None, noise_csd=noise_csd)
     w_ung = filters_ung['weights'][0]
     assert_allclose(np.corrcoef(np.abs(w_nai).ravel(),
                                 np.abs(w_ung).ravel()), 1, atol=1e-7)
@@ -312,7 +336,7 @@ def test_apply_dics_ori_inv(_load_forward, pick_ori, inversion, idx):
     reg_ = 5 if inversion == 'matrix' else 1
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
                         reg=reg_, pick_ori=pick_ori,
-                        inversion=inversion, normalize_fwd=False,
+                        inversion=inversion, depth=None,
                         weight_norm='unit-noise-gain')
     power, f = apply_dics_csd(csd, filters)
     assert f == [10, 20]
@@ -333,7 +357,7 @@ def test_apply_dics_ori_inv(_load_forward, pick_ori, inversion, idx):
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
                         reg=reg_, pick_ori=pick_ori,
                         inversion=inversion, weight_norm=None,
-                        normalize_fwd=True)
+                        depth=1.)
     power, f = apply_dics_csd(csd, filters)
     assert f == [10, 20]
     dist = _fwd_dist(power, fwd_surf, vertices, source_ind)
@@ -561,7 +585,7 @@ def test_tf_dics(_load_forward, idx):
     # no effect.
     stcs = tf_dics(epochs, fwd_surf, None, tmin, tmax, tstep, win_lengths,
                    mode='cwt_morlet', frequencies=frequencies, decim=10,
-                   reg=reg, label=label, normalize_fwd=False,
+                   reg=reg, label=label, depth=None,
                    weight_norm='unit-noise-gain')
     noise_csd = csd.copy()
     inds = np.triu_indices(csd.n_channels)
@@ -572,7 +596,7 @@ def test_tf_dics(_load_forward, idx):
     stcs_norm = tf_dics(epochs, fwd_surf, noise_csds, tmin, tmax, tstep,
                         win_lengths, mode='cwt_morlet',
                         frequencies=frequencies, decim=10, reg=reg,
-                        label=label, normalize_fwd=False,
+                        label=label, depth=None,
                         weight_norm='unit-noise-gain')
     assert_allclose(3 * stcs_norm[0].data, stcs[0].data, atol=0)
     assert_allclose(3 * stcs_norm[1].data, stcs[1].data, atol=0)
