@@ -400,13 +400,15 @@ class CrossSpectralDensity(object):
                         cmap=cmap, n_cols=n_cols, show=show)
 
     def __setstate__(self, state):  # noqa: D105
+        # Avoid circular import
+        from ..proj import Projection
         self._data = state['data']
         self.tmin = state['tmin']
         self.tmax = state['tmax']
         self.ch_names = state['ch_names']
         self.frequencies = state['frequencies']
         self.n_fft = state['n_fft']
-        self.projs = state['projs']
+        self.projs = [Projection(**proj) for proj in state['projs']]
 
     def __getstate__(self):  # noqa: D105
         return dict(
