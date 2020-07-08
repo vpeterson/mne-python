@@ -415,8 +415,14 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
                     else:  # on_missing == 'ignore':
                         pass
 
+            # ensure metadata matches original events size
+            self.selection = np.arange(len(events))
+            self.events = events
+            self.metadata = metadata
+            del events
+
             values = list(self.event_id.values())
-            selected = np.where(np.in1d(events[:, 2], values))[0]
+            selected = np.where(np.in1d(self.events[:, 2], values))[0]
             if selection is None:
                 selection = selected
             else:
@@ -427,20 +433,30 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
             self.selection = selection
             if drop_log is None:
                 self.drop_log = [list() if k in self.selection else ['IGNORED']
-                                 for k in range(max(len(events),
+                                 for k in range(max(len(self.events),
                                                     max(self.selection) + 1))]
             else:
                 self.drop_log = drop_log
 
-            events = events[selected]
+            self.events = self.events[selected]
 
-            events, self.event_id, self.selection, self.drop_log = \
-                _handle_event_repeated(events, self.event_id, event_repeated,
-                                       self.selection, self.drop_log)
+            self.events, self.event_id, self.selection, self.drop_log = \
+                _handle_event_repeated(
+                    self.events, self.event_id, event_repeated,
+                    self.selection, self.drop_log)
 
-            n_events = len(events)
+            # then subselect
+            sub = np.where(np.in1d(selection, self.selection))[0]
+            if isinstance(metadata, list):
+                metadata = [metadata[s] for s in sub]
+            elif metadata is not None:
+                metadata = metadata.iloc[sub]
+            self.metadata = metadata
+            del metadata
+
+            n_events = len(self.events)
             if n_events > 1:
-                if np.diff(events.astype(np.int64)[:, 0]).min() <= 0:
+                if np.diff(self.events.astype(np.int64)[:, 0]).min() <= 0:
                     warn('The events passed to the Epochs constructor are not '
                          'chronologically ordered.', RuntimeWarning)
 
@@ -448,11 +464,10 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
                 logger.info('%d matching events found' % n_events)
             else:
                 raise ValueError('No desired events found.')
-            self.events = events
-            del events
         else:
             self.drop_log = list()
             self.selection = np.array([], int)
+            self.metadata = metadata
             # do not set self.events here, let subclass do it
 
         # check reject_tmin and reject_tmax
@@ -481,7 +496,6 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
                                    allow_empty=False)
         self.info = pick_info(info, self.picks)
         del info
-        self.metadata = metadata
         self._current = 0
 
         if data is None:
@@ -785,12 +799,13 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
         epoch[picks] = rescale(epoch[picks], self._raw_times, self.baseline,
                                copy=False, verbose=False)
 
+        # Decimate if necessary (i.e., epoch not preloaded)
+        epoch = epoch[:, self._decim_slice]
+
         # handle offset
         if self._offset is not None:
             epoch += self._offset
 
-        # Decimate if necessary (i.e., epoch not preloaded)
-        epoch = epoch[:, self._decim_slice]
         return epoch
 
     def iter_evoked(self, copy=False):
@@ -889,7 +904,7 @@ class BaseEpochs(ProjMixin, ContainsMixin, UpdateChannelsMixin, ShiftTimeMixin,
         else:
             if self._offset is None:
                 self._offset = np.zeros((len(self.ch_names), len(self.times)),
-                                        dtype=np.float)
+                                        dtype=np.float64)
             self._offset[ep_picks] -= evoked.data[picks]
         logger.info('[done]')
 
@@ -2885,35 +2900,37 @@ def add_channels_epochs(epochs_list, verbose=None):
     return epochs
 
 
-def _compare_epochs_infos(info1, info2, ind):
+def _compare_epochs_infos(info1, info2, name):
     """Compare infos."""
+    if not isinstance(name, str):  # passed epochs index
+        name = f'epochs[{name:d}]'
     info1._check_consistency()
     info2._check_consistency()
     if info1['nchan'] != info2['nchan']:
-        raise ValueError('epochs[%d][\'info\'][\'nchan\'] must match' % ind)
+        raise ValueError(f'{name}.info[\'nchan\'] must match')
     if info1['bads'] != info2['bads']:
-        raise ValueError('epochs[%d][\'info\'][\'bads\'] must match' % ind)
+        raise ValueError(f'{name}.info[\'bads\'] must match')
     if info1['sfreq'] != info2['sfreq']:
-        raise ValueError('epochs[%d][\'info\'][\'sfreq\'] must match' % ind)
+        raise ValueError(f'{name}.info[\'sfreq\'] must match')
     if set(info1['ch_names']) != set(info2['ch_names']):
-        raise ValueError('epochs[%d][\'info\'][\'ch_names\'] must match' % ind)
+        raise ValueError(f'{name}.info[\'ch_names\'] must match')
     if len(info2['projs']) != len(info1['projs']):
-        raise ValueError('SSP projectors in epochs files must be the same')
+        raise ValueError(f'SSP projectors in {name} must be the same')
     if any(not _proj_equal(p1, p2) for p1, p2 in
            zip(info2['projs'], info1['projs'])):
-        raise ValueError('SSP projectors in epochs files must be the same')
+        raise ValueError(f'SSP projectors in {name} must be the same')
     if (info1['dev_head_t'] is None) != (info2['dev_head_t'] is None) or \
             (info1['dev_head_t'] is not None and not
              np.allclose(info1['dev_head_t']['trans'],
                          info2['dev_head_t']['trans'], rtol=1e-6)):
-        raise ValueError('epochs[%d][\'info\'][\'dev_head_t\'] must match. '
-                         'The epochs probably come from different runs, and '
+        raise ValueError(f'{name}.info[\'dev_head_t\'] must match. The '
+                         'instances probably come from different runs, and '
                          'are therefore associated with different head '
                          'positions. Manually change info[\'dev_head_t\'] to '
                          'avoid this message but beware that this means the '
                          'MEG sensors will not be properly spatially aligned. '
                          'See mne.preprocessing.maxwell_filter to realign the '
-                         'runs to a common head position.' % ind)
+                         'runs to a common head position.')
 
 
 def _concatenate_epochs(epochs_list, with_data=True, add_offset=True):
@@ -3178,6 +3195,7 @@ def average_movements(epochs, head_pos=None, orig_sfreq=None, picks=None,
     decomp_coil_scale = coil_scale[good_mask]
     exp = dict(int_order=int_order, ext_order=ext_order, head_frame=True,
                origin=origin)
+    n_in = _get_n_moments(int_order)
     for ei, epoch in enumerate(epochs):
         event_time = epochs.events[epochs._current - 1, 0] / orig_sfreq
         use_idx = np.where(t <= event_time)[0]
@@ -3201,8 +3219,8 @@ def average_movements(epochs, head_pos=None, orig_sfreq=None, picks=None,
         if not reuse:
             S = _trans_sss_basis(exp, all_coils, trans,
                                  coil_scale=decomp_coil_scale)
-            # Get the weight from the un-regularized version
-            weight = np.sqrt(np.sum(S * S))  # frobenius norm (eq. 44)
+            # Get the weight from the un-regularized version (eq. 44)
+            weight = np.linalg.norm(S[:, :n_in])
             # XXX Eventually we could do cross-talk and fine-cal here
             S *= weight
         S_decomp += S  # eq. 41

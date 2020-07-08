@@ -210,6 +210,10 @@ def test_make_dics(tmpdir, _load_forward, idx, whiten):
     G = G.transpose(1, 2, 0)  # verts, orient, ch
 
     _assert_weight_norm(filters, G)
+    filters = make_dics(epochs.info, fwd_surf, csd, label=label, pick_ori=None,
+                        weight_norm='sqrtm', depth=None,
+                        noise_csd=noise_csd)
+    _assert_weight_norm(filters, G)
 
     # Test picking orientations. Also test weight norming under these different
     # conditions.
@@ -280,7 +284,7 @@ def test_make_dics(tmpdir, _load_forward, idx, whiten):
     assert isinstance(filters, Beamformer)
     assert isinstance(filters_read, Beamformer)
     for key in ['tmin', 'tmax']:  # deal with strictness of object_diff
-        setattr(filters['csd'], key, np.float(getattr(filters['csd'], key)))
+        setattr(filters['csd'], key, np.float64(getattr(filters['csd'], key)))
     assert object_diff(filters, filters_read) == ''
 
 
@@ -331,7 +335,7 @@ def test_apply_dics_ori_inv(_load_forward, pick_ori, inversion, idx):
     fwd_free, fwd_surf, fwd_fixed, fwd_vol = _load_forward
     epochs, _, csd, source_vertno, label, vertices, source_ind = \
         _simulate_data(fwd_fixed, idx)
-    epochs.pick_types('grad')
+    epochs.pick_types(meg='grad')
 
     reg_ = 5 if inversion == 'matrix' else 1
     filters = make_dics(epochs.info, fwd_surf, csd, label=label,
@@ -341,7 +345,8 @@ def test_apply_dics_ori_inv(_load_forward, pick_ori, inversion, idx):
     power, f = apply_dics_csd(csd, filters)
     assert f == [10, 20]
     dist = _fwd_dist(power, fwd_surf, vertices, source_ind)
-    assert dist == 0.
+    # This is 0. for sqrtm:
+    assert dist <= (0.02 if inversion == 'matrix' else 0.)
     assert power.data[source_ind, 1] > power.data[source_ind, 0]
 
     # Test unit-noise-gain weighting
@@ -379,7 +384,7 @@ def test_real(_load_forward, idx):
     fwd_free, fwd_surf, fwd_fixed, fwd_vol = _load_forward
     epochs, _, csd, source_vertno, label, vertices, source_ind = \
         _simulate_data(fwd_fixed, idx)
-    epochs.pick_types('grad')
+    epochs.pick_types(meg='grad')
     reg = 1  # Lots of regularization for our toy dataset
     filters_real = make_dics(epochs.info, fwd_surf, csd, label=label, reg=reg,
                              real_filter=True)

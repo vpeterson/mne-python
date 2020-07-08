@@ -69,7 +69,8 @@ def _get_data(tmin=-0.1, tmax=0.15, all_forward=True, epochs=True,
     raw.info['bads'] = ['MEG 2443', 'EEG 053']  # 2 bad channels
     # Set up pick list: MEG - bad channels
     left_temporal_channels = mne.read_selection('Left-temporal')
-    picks = mne.pick_types(raw.info, selection=left_temporal_channels)
+    picks = mne.pick_types(raw.info, meg=True,
+                           selection=left_temporal_channels)
     picks = picks[::2]  # decimate for speed
     # add a couple channels we will consider bad
     bad_picks = [100, 101]
@@ -223,7 +224,7 @@ def test_make_lcmv(tmpdir, reg, proj):
         tmax = stc.times[np.argmax(max_stc)]
 
         assert 0.08 < tmax < 0.15, tmax
-        assert 0.9 < np.max(max_stc) < 3., np.max(max_stc)
+        assert 0.9 < np.max(max_stc) < 3.5, np.max(max_stc)
 
         if fwd is forward:
             # Test picking normal orientation (surface source space only).
@@ -428,6 +429,7 @@ def test_make_lcmv(tmpdir, reg, proj):
               noise_cov=noise_cov)
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize('weight_norm', (None, 'unit-noise-gain', 'nai'))
 @pytest.mark.parametrize('pick_ori', (None, 'max-power', 'vector'))
 def test_make_lcmv_sphere(pick_ori, weight_norm):
@@ -466,7 +468,7 @@ def test_make_lcmv_sphere(pick_ori, weight_norm):
     max_stc = stc_sphere.data[idx]
     tmax = stc_sphere.times[np.argmax(max_stc)]
     assert 0.08 < tmax < 0.15, tmax
-    min_, max_ = 1.0, 4.0
+    min_, max_ = 1.0, 4.5
     if weight_norm is None:
         min_ *= 2e-7
         max_ *= 2e-7
@@ -586,7 +588,8 @@ def test_tf_lcmv():
 
     # Set up pick list: MEG - bad channels
     left_temporal_channels = mne.read_selection('Left-temporal')
-    picks = mne.pick_types(raw.info, selection=left_temporal_channels)
+    picks = mne.pick_types(raw.info, meg=True,
+                           selection=left_temporal_channels)
     picks = picks[::2]  # decimate for speed
     raw.pick_channels([raw.ch_names[ii] for ii in picks])
     raw.info.normalize_proj()  # avoid projection warnings
@@ -735,7 +738,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     """Test LCMV with and without proj."""
     raw = mne.io.read_raw_fif(fname_raw, preload=True)
     events = mne.find_events(raw)
-    raw.pick_types()
+    raw.pick_types(meg=True)
     assert len(raw.ch_names) == 305
     epochs = mne.Epochs(raw, events, None, preload=True, proj=proj)
     with pytest.warns(RuntimeWarning, match='Too few samples'):
@@ -751,7 +754,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     with pytest.raises(ValueError, match='several sensor types'):
         make_lcmv(epochs.info, forward, data_cov, reg=0.05,
                   noise_cov=None)
-    epochs.pick_types('grad')
+    epochs.pick_types(meg='grad')
     kwargs = dict(reg=0.05, pick_ori=None, weight_norm=weight_norm)
     filters_cov = make_lcmv(epochs.info, forward, data_cov,
                             noise_cov=noise_cov, **kwargs)
@@ -792,7 +795,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
     if weight_norm == 'nai':
         # NAI is always normalized by noise-level (based on eigenvalues)
         for stc in (stc_nocov, stc_cov):
-            assert_allclose(stc.data.std(), 0.584, rtol=0.1)
+            assert_allclose(stc.data.std(), 0.584, rtol=0.2)
     elif weight_norm is None:
         # None always represents something not normalized, reflecting channel
         # weights
@@ -802,7 +805,7 @@ def test_lcmv_reg_proj(proj, weight_norm):
         assert weight_norm == 'unit-noise-gain'
         # Channel scalings depend on presence of noise_cov
         assert_allclose(stc_nocov.data.std(), 7.8e-13, rtol=0.1)
-        assert_allclose(stc_cov.data.std(), 0.187, rtol=0.1)
+        assert_allclose(stc_cov.data.std(), 0.187, rtol=0.2)
 
 
 @pytest.mark.parametrize('reg, weight_norm, use_cov, depth, lower, upper', [
@@ -821,7 +824,7 @@ def test_localization_bias_fixed(bias_params_fixed, reg, weight_norm, use_cov,
     """Test localization bias for fixed-orientation LCMV."""
     evoked, fwd, noise_cov, data_cov, want = bias_params_fixed
     if not use_cov:
-        evoked.pick_types('grad')
+        evoked.pick_types(meg='grad')
         noise_cov = None
     assert data_cov['data'].shape[0] == len(data_cov['names'])
     loc = apply_lcmv(evoked, make_lcmv(evoked.info, fwd, data_cov, reg,
@@ -835,9 +838,11 @@ def test_localization_bias_fixed(bias_params_fixed, reg, weight_norm, use_cov,
 
 @pytest.mark.parametrize(
     'reg, pick_ori, weight_norm, use_cov, depth, lower, upper', [
-        (0.05, 'vector', 'unit-noise-gain', False, None, 26, 28),
-        (0.05, 'vector', 'unit-noise-gain', True, None, 40, 42),
-        (0.05, 'vector', 'nai', True, None, 40, 42),
+        (0.05, 'vector', 'sqrtm', False, None, 26, 28),
+        (0.05, 'vector', 'sqrtm', True, None, 40, 42),
+        (0.05, 'vector', 'unit-noise-gain', False, None, 13, 14),
+        (0.05, 'vector', 'unit-noise-gain', True, None, 35, 37),
+        (0.05, 'vector', 'nai', True, None, 35, 37),
         (0.05, 'vector', None, True, None, 12, 14),
         (0.05, 'vector', None, True, 0.8, 39, 43),
         (0.05, 'max-power', 'unit-noise-gain', False, None, 17, 20),
@@ -858,7 +863,7 @@ def test_localization_bias_free(bias_params_free, reg, pick_ori, weight_norm,
     """Test localization bias for free-orientation LCMV."""
     evoked, fwd, noise_cov, data_cov, want = bias_params_free
     if not use_cov:
-        evoked.pick_types('grad')
+        evoked.pick_types(meg='grad')
         noise_cov = None
     loc = apply_lcmv(evoked, make_lcmv(evoked.info, fwd, data_cov, reg,
                                        noise_cov, pick_ori=pick_ori,
@@ -895,7 +900,7 @@ def test_lcmv_maxfiltered():
     raw_sss = mne.preprocessing.maxwell_filter(raw)
     events = mne.find_events(raw_sss)
     del raw
-    raw_sss.pick_types('mag')
+    raw_sss.pick_types(meg='mag')
     assert len(raw_sss.ch_names) == 102
     epochs = mne.Epochs(raw_sss, events)
     data_cov = mne.compute_covariance(epochs, tmin=0)
@@ -907,9 +912,10 @@ def test_lcmv_maxfiltered():
 
 
 @testing.requires_testing_data
-@pytest.mark.parametrize('pick_ori', ['max-power', 'normal', 'vector'])
+@pytest.mark.parametrize('pick_ori', ['vector', 'max-power', 'normal'])
+@pytest.mark.parametrize('weight_norm', ['unit-noise-gain'])  # , 'sqrtm'])
 @pytest.mark.parametrize('reg', (0.05, 0.))
-def test_unit_noise_gain_formula(pick_ori, reg):
+def test_unit_noise_gain_formula(pick_ori, weight_norm, reg):
     """Test unit-noise-gain filter against formula."""
     raw = mne.io.read_raw_fif(fname_raw, preload=True)
     events = mne.find_events(raw)
@@ -917,13 +923,14 @@ def test_unit_noise_gain_formula(pick_ori, reg):
     assert len(raw.ch_names) == 102
     epochs = mne.Epochs(raw, events, None, preload=True)
     data_cov = mne.compute_covariance(epochs, tmin=0.04, tmax=0.15)
-    noise_cov = None  # no whitening to make things easier
+    # for now, avoid whitening to make life easier
+    noise_cov = mne.make_ad_hoc_cov(epochs.info, std=dict(grad=1., mag=1.))
     forward = mne.read_forward_solution(fname_fwd)
     convert_forward_solution(forward, surf_ori=True, copy=False)
     rank = None
     filters = make_lcmv(epochs.info, forward, data_cov, reg=reg,
                         noise_cov=noise_cov, pick_ori=pick_ori,
-                        weight_norm='unit-noise-gain', rank=rank)
+                        weight_norm=weight_norm, rank=rank)
     _, _, _, _, G, _, _, _ = _prepare_beamformer_input(
         epochs.info, forward, None, 'vector', noise_cov=noise_cov, rank=rank,
         pca=False, exp=None)
@@ -931,10 +938,10 @@ def test_unit_noise_gain_formula(pick_ori, reg):
     n_sources //= 3
     G.shape = (n_channels, n_sources, 3)
     G = G.transpose(1, 2, 0)  # verts, orient, ch
-    _assert_weight_norm(filters, G)
+    _assert_weight_norm(filters, G, weight_norm)
 
 
-def _assert_weight_norm(filters, G):
+def _assert_weight_norm(filters, G, weight_norm='unit-noise-gain'):
     weights, max_power_ori = filters['weights'], filters['max_power_ori']
     if weights.ndim == 2:  # LCMV
         weights = weights[np.newaxis]
@@ -962,7 +969,14 @@ def _assert_weight_norm(filters, G):
         assert w.shape == use_G.shape == (n_sources, n_orient, n_channels)
         got = np.matmul(w, w.conj().swapaxes(-2, -1))
         desired = np.repeat(np.eye(n_orient)[np.newaxis], w.shape[0], axis=0)
+        if n_orient == 3 and weight_norm == 'unit-noise-gain':
+            # only the diagonal is correct
+            got = got.reshape(n_sources, -1)[:, ::n_orient + 1]
+            desired = np.ones_like(got)
         assert_allclose(got, desired, atol=1e-7, err_msg='w @ w.conj().T')
-        # TODO: Some variant of this should also hold
-        # got = w @ use_G.T
-        # assert_allclose(got, want, atol=1e-7, err_msg='G @ w')
+        # Check that the result here is a constant times a diagonal matrix
+        # (for Sekihara) or a rotated version of that (for sqrtm)
+        # got = w @ use_G.swapaxes(-2, -1)
+        # s = np.linalg.svd(got, compute_uv=False)
+        # theta = np.repeat(s[..., :1], s.shape[-1], axis=-1)
+        # assert_allclose(s, theta, rtol=1e-1, err_msg='G.T @ w = θI')

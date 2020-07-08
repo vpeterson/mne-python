@@ -357,10 +357,10 @@ class Evoked(ProjMixin, ContainsMixin, UpdateChannelsMixin, SetChannelsMixin,
 
     @copy_function_doc_to_method_doc(plot_evoked_white)
     def plot_white(self, noise_cov, show=True, rank=None, time_unit='s',
-                   sphere=None, verbose=None):
+                   sphere=None, axes=None, verbose=None):
         return plot_evoked_white(
             self, noise_cov=noise_cov, rank=rank, show=show,
-            time_unit=time_unit, sphere=sphere, verbose=verbose)
+            time_unit=time_unit, sphere=sphere, axes=axes, verbose=verbose)
 
     @copy_function_doc_to_method_doc(plot_evoked_joint)
     def plot_joint(self, times="peaks", title='', picks=None,
@@ -746,7 +746,7 @@ class EvokedArray(Evoked):
         self.first = int(round(tmin * info['sfreq']))
         self.last = self.first + np.shape(data)[-1] - 1
         self.times = np.arange(self.first, self.last + 1,
-                               dtype=np.float) / info['sfreq']
+                               dtype=np.float64) / info['sfreq']
         self.info = info.copy()  # do not modify original info
         self.nave = nave
         self.kind = kind
@@ -837,23 +837,26 @@ def _check_evokeds_ch_names_times(all_evoked):
 def combine_evoked(all_evoked, weights):
     """Merge evoked data by weighted addition or subtraction.
 
-    Data should have the same channels and the same time instants.
-    Subtraction can be performed by calling
-    ``combine_evoked([evoked1, -evoked2], 'equal')``
+    Each `~mne.Evoked` in ``all_evoked`` should have the same channels and the
+    same time instants. Subtraction can be performed by passing
+    ``weights=[1, -1]``.
 
     .. Warning::
-        If you provide an array of weights instead of using ``'equal'`` or
-        ``'nave'``, strange things may happen with your resulting signal
-        amplitude and/or ``.nave`` attribute.
+        Other than cases like simple subtraction mentioned above (where all
+        weights are -1 or 1), if you provide numeric weights instead of using
+        ``'equal'`` or ``'nave'``, the resulting `~mne.Evoked` object's
+        ``.nave`` attribute (which is used to scale noise covariance when
+        applying the inverse operator) may not be suitable for inverse imaging.
 
     Parameters
     ----------
     all_evoked : list of Evoked
         The evoked datasets.
-    weights : list of float | str
-        The weights to apply to the data of each evoked instance.
-        Can also be ``'nave'`` to weight according to evoked.nave,
-        or ``"equal"`` to use equal weighting (each weighted as ``1/N``).
+    weights : list of float | 'equal' | 'nave'
+        The weights to apply to the data of each evoked instance, or a string
+        describing the weighting strategy to apply: ``'nave'`` computes
+        sum-to-one weights proportional to each object's ``nave`` attribute;
+        ``'equal'`` weights each `~mne.Evoked` by ``1 / len(all_evoked)``.
 
     Returns
     -------
@@ -870,7 +873,7 @@ def combine_evoked(all_evoked, weights):
         if weights == 'nave':
             weights = naves / naves.sum()
         else:
-            weights = np.ones_like(naves)
+            weights = np.ones_like(naves) / len(naves)
     else:
         weights = np.array(weights, float)
 
@@ -878,8 +881,7 @@ def combine_evoked(all_evoked, weights):
         raise ValueError('weights must be the same size as all_evoked')
 
     # cf. https://en.wikipedia.org/wiki/Weighted_arithmetic_mean, section on
-    # how variances change when summing Gaussian random variables. The variance
-    # of a weighted sample mean is:
+    # "weighted sample variance". The variance of a weighted sample mean is:
     #
     #    σ² = w₁² σ₁² + w₂² σ₂² + ... + wₙ² σₙ²
     #
@@ -892,18 +894,17 @@ def combine_evoked(all_evoked, weights):
     # This general formula is equivalent to formulae in Matti's manual
     # (pp 128-129), where:
     # new_nave = sum(naves) when weights='nave' and
-    # new_nave = 1. / sum(1. / naves) when weights='equal'
+    # new_nave = 1. / sum(1. / naves) when weights are all 1.
 
     all_evoked = _check_evokeds_ch_names_times(all_evoked)
     evoked = all_evoked[0].copy()
 
     # use union of bad channels
-    bads = list(set(evoked.info['bads']).union(*(ev.info['bads']
-                                                 for ev in all_evoked[1:])))
+    bads = list(set(b for e in all_evoked for b in e.info['bads']))
     evoked.info['bads'] = bads
     evoked.data = sum(w * e.data for w, e in zip(weights, all_evoked))
     evoked.nave = new_nave
-    evoked.comment = ' + '.join('%0.3f * %s' % (w, e.comment or 'unknown')
+    evoked.comment = ' + '.join(f'{w:0.3f} × {e.comment or "unknown"}'
                                 for w, e in zip(weights, all_evoked))
     return evoked
 
@@ -1110,7 +1111,7 @@ def _read_evoked(fname, condition=None, kind='average', allow_maxshield=False):
         else:
             # Put the old style epochs together
             data = np.concatenate([e.data[None, :] for e in epoch], axis=0)
-        data = data.astype(np.float)
+        data = data.astype(np.float64)
 
         if first_time is not None and nsamp is not None:
             times = first_time + np.arange(nsamp) / info['sfreq']
@@ -1162,6 +1163,7 @@ def write_evokeds(fname, evoked):
 
 def _write_evokeds(fname, evoked, check=True):
     """Write evoked data."""
+    from .epochs import _compare_epochs_infos
     if check:
         check_fname(fname, 'evoked', ('-ave.fif', '-ave.fif.gz',
                                       '_ave.fif', '_ave.fif.gz'))
@@ -1183,7 +1185,9 @@ def _write_evokeds(fname, evoked, check=True):
 
         # One or more evoked data sets
         start_block(fid, FIFF.FIFFB_PROCESSED_DATA)
-        for e in evoked:
+        for ei, e in enumerate(evoked):
+            if ei:
+                _compare_epochs_infos(evoked[0].info, e.info, f'evoked[{ei}]')
             start_block(fid, FIFF.FIFFB_EVOKED)
 
             # Comment is optional
@@ -1276,7 +1280,7 @@ def _get_peak(data, times, tmin=None, tmax=None, mode='abs'):
         raise ValueError('The tmin must be smaller or equal to tmax')
 
     time_win = (times >= tmin) & (times <= tmax)
-    mask = np.ones_like(data).astype(np.bool)
+    mask = np.ones_like(data).astype(bool)
     mask[:, time_win] = False
 
     maxfun = np.argmax

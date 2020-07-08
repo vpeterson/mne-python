@@ -27,9 +27,19 @@ Changelog
 
 - Add :meth:`mne.MixedSourceEstimate.surface` and :meth:`mne.MixedSourceEstimate.volume` methods to allow surface and volume extraction by `Eric Larson`_
 
+- Add :meth:`mne.VectorSourceEstimate.project` to project vector source estimates onto the direction of maximum source power by `Eric Larson`_
+
 - Add support to :func:`mne.extract_label_time_course` for vector-valued and volumetric source estimates by `Eric Larson`_
 
 - Add method :meth:`mne.VolSourceEstimate.in_label` by `Eric Larson`_
+
+- Add support for mixed source spaces to :func:`mne.compute_source_morph` by `Eric Larson`_
+
+- Add support for omitting the SDR step in volumetric morphing by passing ``n_iter_sdr=()`` to `mne.compute_source_morph` by `Eric Larson`_
+
+- Add support for passing a string argument to ``bg_img`` in `mne.viz.plot_volume_source_estimates` by `Eric Larson`_
+
+- Add support for providing the destination surface source space in the ``src_to`` argument of :func:`mne.compute_source_morph` by `Eric Larson`_
 
 - Add ``tol_kind`` option to :func:`mne.compute_rank` by `Eric Larson`_
 
@@ -63,23 +73,41 @@ Changelog
 
 - Add "on_missing='raise'" to :meth:`mne.io.Raw.set_montage` and related functions to allow ignoring of missing electrode coordinates by `Adam Li`_
 
+- Add better sanity checking of ``max_pca_components`` and ``n_components`` to provide more informative error messages for :class:`mne.preprocessing.ICA` by `Eric Larson`_
+
 - Add ``plot`` option to :meth:`mne.viz.plot_filter` allowing selection of which filter properties are plotted and added option for user to supply ``axes`` by `Robert Luke`_
 
 - Add estimation method legend to :func:`mne.viz.plot_snr_estimate` by `Eric Larson`_
+
+- Add support to `mne.SourceSpaces.export_volume` for ``mri_resolution='sparse'`` to color only the nearest-neighbor voxels instead of entire regions by `Eric Larson`_
+
+- Add ``axes`` argument to :func:`mne.viz.plot_evoked_white`, :meth:`mne.Evoked.plot_white`, and :func:`mne.viz.plot_snr_estimate` by `Eric Larson`_
 
 - Add ``sources`` and ``detectors`` options for fNIRS use of :meth:`mne.viz.plot_alignment` allowing plotting of optode locations in addition to channel midpoint ``channels`` and ``path`` between fNIRS optodes by `Kyle Mathewson`_
 
 - Add ECoG misc EDF dataset to the :ref:`tut_working_with_ecog` tutorial to show snapshots of time-frequency activity by `Adam Li`_
 
+- Add :func:`mne.viz.set_3d_options` and ``MNE_3D_OPTION_ANTIALIAS`` environment variable to control full-scene antialiasing (FXAA) in 3D functions like :ref:`mne coreg`, :func:`mne.viz.plot_alignment`, and :func:`mne.viz.plot_source_estimates`; this can be useful on systems where FXAA does not work well, such as some with MESA software rendering, by `Eric Larson`_
+
+- Add better support for reading corrupted FIF files in :func:`mne.io.read_raw_fif` by `Eric Larson`_
+
 - BIDS conformity: When saving FIF files to disk and the files are split into parts, the ``split_naming='bids'`` parameter now uses a "_split-%d" naming instead of the previous "_part-%d", by `Stefan Appelhoff`_
 
 - Add support for whitening and multiple channel types in :func:`mne.beamformer.make_dics` by `Marijn van Vliet`_
+
+- Add better error message when trying to save incompatible `~mne.Evoked` objects to the same file by `Eric Larson`_
 
 - Add support for loading complex numbers from mat files by `Thomas Hartmann`_
 
 - Add generic reader function :func:`mne.io.read_raw` that loads files based on their extensions (it wraps the underlying specific ``read_raw_xxx`` functions) by `Clemens Brunner`_
 
 - Add ``'auto'`` option to :meth:`mne.preprocessing.ICA.find_bads_ecg` to automatically determine the threshold for CTPS method by `Yu-Han Luo`_
+
+- Add a ``notebook`` 3d backend for visualization in jupyter notebook with :func:`mne.viz.set_3d_backend` by`Guillaume Favelier`_
+
+- Add support for reading and writing surfaces in Wavefront .obj format to the :func:`mne.read_surface` and :func:`mne.write_surface` by `Marijn van Vliet`_
+
+- Add tutorial on how to manually fix BEM meshes in Blender by `Marijn van Vliet`_ and `Ezequiel Mikulan`_
 
 Bug
 ~~~
@@ -90,13 +118,23 @@ Bug
 
 - Fix bug with :func:`mne.setup_volume_source_space` when ``volume_label`` was supplied where voxels slightly (in a worst case, about 37% times ``pos`` in distance) outside the voxel-grid-based bounds of regions were errantly included, by `Eric Larson`_
 
+- Fix bug with `mne.SourceSpaces.export_volume` with ``use_lut=False`` where no values were written by `Eric Larson`_
+
 - Fix bug with :func:`mne.preprocessing.annotate_movement` where bad data segments, specified in ``raw.annotations``, would be handled incorrectly by `Luke Bloy`_
 
 - Fix bug with :func:`mne.compute_source_morph` when more than one volume source space was present (e.g., when using labels) where only the first label would be interpolated when ``mri_resolution=True`` by `Eric Larson`_
 
+- Fix bug with :func:`mne.compute_source_morph` when morphing to a volume source space when ``src_to`` is used and the destination subject is not ``fsaverage`` by `Eric Larson`_
+
+- Fix bug with :func:`mne.compute_source_morph` where outermost voxels in the destination source space could be errantly omitted by `Eric Larson`_
+
 - Fix bug with :func:`mne.minimum_norm.compute_source_psd_epochs` and :func:`mne.minimum_norm.source_band_induced_power` raised errors when ``method='eLORETA'`` by `Eric Larson`_
 
 - Fix bug with :func:`mne.minimum_norm.apply_inverse` where the explained variance did not work for complex data by `Eric Larson`_
+
+- Fix bug with :func:`mne.preprocessing.compute_current_source_density` where values were not properly computed; maps should now be more focal, by `Alex Rockhill`_ and `Eric Larson`_
+
+- Fix bug with :func:`mne.combine_evoked` where equal-weighted averages were wrongly computed as equal-weighted sums, by `Daniel McCloy`_
 
 - Fix to enable interactive plotting with no colorbar with :func:`mne.viz.plot_evoked_topomap` by `Daniel McCloy`_
 
@@ -105,6 +143,8 @@ Bug
 - The default plotting mode for :func:`mne.io.Raw.plot` and :ref:`mne browse_raw` has been changed to ``clipping=3.`` to facilitate data analysis with large deflections, by `Eric Larson`_
 
 - PSD plots will now show non-data channels (e.g., ``misc``) if those channels are explicitly passed to ``picks``, by `Daniel McCloy`_.
+
+- Fix bug with :func:`mne.time_frequency.read_tfrs` where ``info['meas_date']`` was not parsed correctly, by `Eric Larson`_
 
 - Fix handling of NaN when using TFCE in clustering functions such as :func:`mne.stats.spatio_temporal_cluster_1samp_test` by `Eric Larson`_
 
@@ -116,15 +156,21 @@ Bug
 
 - Fix default to be ``foreground=None`` in :func:`mne.viz.plot_source_estimates` to use white or black text based on the background color by `Eric Larson`_
 
+- Fix bug with writing EGI and CTF `mne.Info` to H5 format, e.g., with `mne.time_frequency.AverageTFR.save` by `Eric Larson`_
+
 - Fix bug with :func:`mne.io.Raw.plot` where toggling all projectors did not actually take effect by `Eric Larson`_
 
 - Fix bug with :func:`mne.read_epochs` when loading data in complex format with ``preload=False`` by `Eric Larson`_
 
 - Fix bug with :meth:`mne.Epochs.save` where the file splitting calculations did not account for the sizes of non-data writes by `Eric Larson`_
 
+- Fix bug with :class:`mne.Epochs` when metadata was not subselected properly when ``event_repeated='drop'`` by `Eric Larson`_
+
 - Fix bug with :class:`mne.Report` where the BEM section could not be toggled by `Eric Larson`_
 
 - Fix bug when using :meth:`mne.Epochs.crop` to exclude the baseline period would break :func:`mne.Epochs.save` / :func:`mne.read_epochs` round-trip by `Eric Larson`_
+
+- Fix bug with `mne.Epochs.subtract_evoked` where using decimated epochs would lead to an error by `Eric Larson`_
 
 - Fix bug with :func:`mne.viz.plot_bem` and :class:`mne.Report` when plotting BEM contours when MRIs are not in standard FreeSurfer orientation by `Eric Larson`_
 
@@ -139,6 +185,8 @@ Bug
 
 - Fix bug with :func:`mne.io.read_raw_edf` where null bytes were not properly handled, causing an error when opening a file by `Eric Larson`_
 
+- Fix bug with :func:`mne.Report` where unicode characters were not rendered properly (encoding for HTML was not set) by `Eric Larson`_
+
 - Fix bug with :func:`mne.preprocessing.nirs.scalp_coupling_index` where filter transition was incorrectly assigned by `Robert Luke`_
 
 - Fix bug with :func:`mne.make_forward_dipole` where :func:`mne.write_forward_solution` could not be used by `Eric Larson`_
@@ -148,6 +196,8 @@ Bug
 - Default ``border`` and ``extrapolate`` arguments for :func:`mne.Evoked.plot_topomap` and related functions were changed from ``0.`` to ``'mean'`` and ``'box'`` to ``'auto'``, respectively, to help more accurately reflect sensor geometries and boundary conditions. ``extrapolate='auto'`` uses ``extrapolate='local'`` for MEG data and ``extrapolate='head'`` otherwise, by `Eric Larson`_
 
 - Fix bug that prevents ``n_jobs`` from being a NumPy integer type, by `Daniel McCloy`_.
+
+- Fix bug with :func:`mne.epochs.average_movements` where epoch weights were computed using all basis vectors instead of the internal basis only by `Eric Larson`_
 
 - Fix bug with :func:`mne.io.read_raw_gdf` where birthdays were not parsed properly, leading to an error by `Svea Marie Meyer`_
 
@@ -166,6 +216,10 @@ Bug
 - Fix bug with :func:`mne.beamformer.make_dics` where complex conjugates were not applied properly by `Britta Westner`_ and `Eric Larson`_
 
 - Fix bug with :func:`mne.bem.make_watershed_bem` where the RAS coordinates of watershed bem surfaces were not updated correctly from the volume file by `Yu-Han Luo`_
+
+- Fix bug with :meth:`mne.io.Raw.get_channel_types` and related methods where the ordering of ``picks`` was not preserved, by `Eric Larson`_
+
+- Fix bug with :meth:`mne.io.Raw.plot_psd` with ``average=False`` and multiple channel types where channel locations were not shown properly by `Eric Larson`_
 
 - Fix bug in FieldTrip reader functions when channels are missing in the ``info`` object by `Thomas Hartmann`_
 
@@ -192,8 +246,12 @@ API
 
 - The method ``stc_mixed.plot_surface`` for a :class:`mne.MixedSourceEstimate` has been deprecated in favor of :meth:`stc.surface().plot(...) <mne.MixedSourceEstimate.surface>` by `Eric Larson`_
 
-- Add ``use_dev_head_trans`` parameter to :func:`mne.preprocessing.annotate_movement` to allow choosing the device to head transform is used to define the fixed cHPI coordinates By `Luke Bloy`_
+- The method ``stc.normal`` for :class:`mne.VectorSourceEstimate` has been deprecated in favor of :meth:`stc.project('nn', src) <mne.VectorSourceEstimate.project>` by `Eric Larson`_
+
+- Add ``use_dev_head_trans`` parameter to :func:`mne.preprocessing.annotate_movement` to allow choosing the device to head transform is used to define the fixed cHPI coordinates by `Luke Bloy`_
 
 - The function ``mne.channels.read_dig_captrack`` will be deprecated in version 0.22 in favor of :func:`mne.channels.read_dig_captrak` to correct the spelling error: "captraCK" -> "captraK", by `Stefan Appelhoff`_
 
 - The ``threshold`` argument in :meth:`mne.preprocessing.ICA.find_bads_ecg` defaults to ``None`` in version 0.21 but will change to ``'auto'`` in 0.22 by `Yu-Han Luo`_
+
+- The default argument ``meg=True`` in :func:`mne.pick_types` will change to ``meg=False`` in version 0.22 by `Clemens Brunner`_

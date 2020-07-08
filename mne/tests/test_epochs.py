@@ -1158,12 +1158,10 @@ def test_evoked_arithmetic():
     evoked2 = epochs2.average()
     epochs = Epochs(raw, events[:8], event_id, tmin, tmax, picks=picks)
     evoked = epochs.average()
-    evoked_sum = combine_evoked([evoked1, evoked2], weights='nave')
-    assert_array_equal(evoked.data, evoked_sum.data)
-    assert_array_equal(evoked.times, evoked_sum.times)
-    assert_equal(evoked_sum.nave, evoked1.nave + evoked2.nave)
-    evoked_diff = combine_evoked([evoked1, evoked1], weights=[1, -1])
-    assert_array_equal(np.zeros_like(evoked.data), evoked_diff.data)
+    evoked_avg = combine_evoked([evoked1, evoked2], weights='nave')
+    assert_array_equal(evoked.data, evoked_avg.data)
+    assert_array_equal(evoked.times, evoked_avg.times)
+    assert_equal(evoked_avg.nave, evoked1.nave + evoked2.nave)
 
 
 def test_evoked_io_from_epochs(tmpdir):
@@ -1176,8 +1174,9 @@ def test_evoked_io_from_epochs(tmpdir):
                     picks=picks, decim=5)
     evoked = epochs.average()
     evoked.info['proj_name'] = ''  # Test that empty string shortcuts to None.
-    evoked.save(op.join(tempdir, 'evoked-ave.fif'))
-    evoked2 = read_evokeds(op.join(tempdir, 'evoked-ave.fif'))[0]
+    fname_temp = op.join(tempdir, 'evoked-ave.fif')
+    evoked.save(fname_temp)
+    evoked2 = read_evokeds(fname_temp)[0]
     assert_equal(evoked2.info['proj_name'], None)
     assert_allclose(evoked.data, evoked2.data, rtol=1e-4, atol=1e-20)
     assert_allclose(evoked.times, evoked2.times, rtol=1e-4,
@@ -1187,8 +1186,8 @@ def test_evoked_io_from_epochs(tmpdir):
     epochs = Epochs(raw, events[:4], event_id, 0.1, tmax,
                     picks=picks, baseline=(0.1, 0.2), decim=5)
     evoked = epochs.average()
-    evoked.save(op.join(tempdir, 'evoked-ave.fif'))
-    evoked2 = read_evokeds(op.join(tempdir, 'evoked-ave.fif'))[0]
+    evoked.save(fname_temp)
+    evoked2 = read_evokeds(fname_temp)[0]
     assert_allclose(evoked.data, evoked2.data, rtol=1e-4, atol=1e-20)
     assert_allclose(evoked.times, evoked2.times, rtol=1e-4, atol=1e-20)
 
@@ -1199,6 +1198,25 @@ def test_evoked_io_from_epochs(tmpdir):
     evoked.crop(0.099, None)
     assert_allclose(evoked.data, evoked2.data, rtol=1e-4, atol=1e-20)
     assert_allclose(evoked.times, evoked2.times, rtol=1e-4, atol=1e-20)
+
+    # should work when one channel type is changed to a non-data ch
+    picks = pick_types(raw.info, meg=True, eeg=True)
+    epochs = Epochs(raw, events[:4], event_id, -0.2, tmax,
+                    picks=picks, baseline=(0.1, 0.2), decim=5)
+    with pytest.warns(RuntimeWarning, match='unit for.*changed from'):
+        epochs.set_channel_types({epochs.ch_names[0]: 'syst'})
+    evokeds = list()
+    for picks in (None, 'all'):
+        evoked = epochs.average(picks)
+        evokeds.append(evoked)
+        evoked.save(fname_temp)
+        evoked2 = read_evokeds(fname_temp)[0]
+        start = 1 if picks is None else 0
+        for ev in (evoked, evoked2):
+            assert ev.ch_names == epochs.ch_names[start:]
+            assert_allclose(ev.data, epochs.get_data().mean(0)[start:])
+    with pytest.raises(ValueError, match='.*nchan.* must match'):
+        write_evokeds(fname_temp, evokeds)
 
 
 def test_evoked_standard_error(tmpdir):
@@ -1608,6 +1626,14 @@ def test_subtract_evoked():
     zero_evoked = epochs.average()
     data = zero_evoked.data
     assert_allclose(data, np.zeros_like(data), atol=1e-15)
+
+    # with decimation (gh-7854)
+    epochs3 = Epochs(raw, events[:10], event_id, tmin, tmax, picks=picks,
+                     decim=10, verbose='error')
+    data_old = epochs2.decimate(10, verbose='error').get_data()
+    data = epochs3.subtract_evoked().get_data()
+    assert_allclose(data, data_old)
+    assert_allclose(epochs3.average().data, 0., atol=1e-20)
 
 
 def test_epoch_eq():
@@ -2628,6 +2654,33 @@ def test_metadata(tmpdir):
     with pytest.raises(ValueError,
                        match='metadata must have the same number of rows .*'):
         epochs['new_key == 1']
+
+    # metadata should be same length as original events
+    raw_data = np.random.randn(2, 10000)
+    info = mne.create_info(2, 1000.)
+    raw = mne.io.RawArray(raw_data, info)
+    opts = dict(raw=raw, tmin=0, tmax=.001, baseline=None)
+    events = [[0, 0, 1], [1, 0, 2]]
+    metadata = DataFrame(events, columns=['onset', 'duration', 'value'])
+    epochs = Epochs(events=events, event_id=1, metadata=metadata, **opts)
+    epochs.drop_bad()
+    assert len(epochs) == 1
+    assert len(epochs.metadata) == 1
+    with pytest.raises(ValueError, match='same number of rows'):
+        Epochs(events=events, event_id=1, metadata=metadata.iloc[:1], **opts)
+
+    # gh-7732: problem when repeated events and metadata
+    for er in ('drop', 'merge'):
+        events = [[1, 0, 1], [1, 0, 1]]
+        epochs = Epochs(events=events, event_repeated=er, **opts)
+        epochs.drop_bad()
+        assert len(epochs) == 1
+        events = [[1, 0, 1], [1, 0, 1]]
+        epochs = Epochs(
+            events=events, event_repeated=er, metadata=metadata, **opts)
+        epochs.drop_bad()
+        assert len(epochs) == 1
+        assert len(epochs.metadata) == 1
 
 
 def assert_metadata_equal(got, exp):

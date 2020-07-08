@@ -372,7 +372,7 @@ def _compute_tfr(epoch_data, freqs, sfreq=1.0, method='morlet',
     elif output in ('complex', 'avg_power_itc'):
         # avg_power_itc is stored as power + 1i * itc to keep a
         # simple dimensionality
-        dtype = np.complex
+        dtype = np.complex128
 
     if ('avg_' in output) or ('itc' in output):
         out = np.empty((n_chans, n_freqs, n_times), dtype)
@@ -497,7 +497,7 @@ def _time_frequency_loop(X, Ws, output, use_fft, mode, decim):
     # Set output type
     dtype = np.float
     if output in ['complex', 'avg_power_itc']:
-        dtype = np.complex
+        dtype = np.complex128
 
     # Init outputs
     decim = _check_decim(decim)
@@ -514,7 +514,7 @@ def _time_frequency_loop(X, Ws, output, use_fft, mode, decim):
 
         # Inter-trial phase locking is apparently computed per taper...
         if 'itc' in output:
-            plf = np.zeros((n_freqs, n_times), dtype=np.complex)
+            plf = np.zeros((n_freqs, n_times), dtype=np.complex128)
 
         # Loop across epochs
         for epoch_idx, tfr in enumerate(coefs):
@@ -591,7 +591,7 @@ def cwt(X, Ws, use_fft=True, mode='same', decim=1):
 
     coefs = _cwt(X, Ws, mode, decim=decim, use_fft=use_fft)
 
-    tfrs = np.empty((n_signals, len(Ws), n_times), dtype=np.complex)
+    tfrs = np.empty((n_signals, len(Ws), n_times), dtype=np.complex128)
     for k, tfr in enumerate(coefs):
         tfrs[k] = tfr
 
@@ -2286,6 +2286,7 @@ def read_tfrs(fname, condition=None):
     tfr_data = read_hdf5(fname, title='mnepython', slash='replace')
     for k, tfr in tfr_data:
         tfr['info'] = Info(tfr['info'])
+        tfr['info']._check_consistency()
         if 'metadata' in tfr:
             tfr['metadata'] = _prepare_read_metadata(tfr['metadata'])
     is_average = 'nave' in tfr

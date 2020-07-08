@@ -285,7 +285,7 @@ def test_tfr_multitaper():
     seed = 42
     rng = np.random.RandomState(seed)
     noise = 0.1 * rng.randn(n_epochs, len(ch_names), n_times)
-    t = np.arange(n_times, dtype=np.float) / sfreq
+    t = np.arange(n_times, dtype=np.float64) / sfreq
     signal = np.sin(np.pi * 2. * 50. * t)  # 50 Hz sinusoid signal
     signal[np.logical_or(t < 0.45, t > 0.55)] = 0.  # Hard windowing
     on_time = np.logical_and(t >= 0.45, t <= 0.55)
@@ -302,7 +302,7 @@ def test_tfr_multitaper():
     epochs = EpochsArray(data=dat, info=info, events=events, event_id=event_id,
                          reject=reject)
 
-    freqs = np.arange(35, 70, 5, dtype=np.float)
+    freqs = np.arange(35, 70, 5, dtype=np.float64)
 
     power, itc = tfr_multitaper(epochs, freqs=freqs, n_cycles=freqs / 2.,
                                 time_bandwidth=4.0)
@@ -409,7 +409,9 @@ def test_io():
 
     info = mne.create_info(['MEG 001', 'MEG 002', 'MEG 003'], 1000.,
                            ['mag', 'mag', 'mag'])
-    info['meas_date'] = datetime.datetime(year=2020, month=2, day=5)
+    info['meas_date'] = datetime.datetime(year=2020, month=2, day=5,
+                                          tzinfo=datetime.timezone.utc)
+    info._check_consistency()
     tfr = AverageTFR(info, data=data, times=times, freqs=freqs,
                      nave=20, comment='test', method='crazy-tfr')
     tfr.save(fname)
@@ -426,6 +428,8 @@ def test_io():
     pytest.raises(IOError, tfr.save, fname)
 
     tfr.comment = None
+    # test old meas_date
+    info['meas_date'] = (1, 2)
     tfr.save(fname, overwrite=True)
     assert_equal(read_tfrs(fname, condition=0).comment, tfr.comment)
     tfr.comment = 'test-A'
@@ -651,9 +655,9 @@ def test_compute_tfr():
 
         # Check types
         if output in ('complex', 'avg_power_itc'):
-            assert_equal(np.complex, out.dtype)
+            assert_equal(np.complex128, out.dtype)
         else:
-            assert_equal(np.float, out.dtype)
+            assert_equal(np.float64, out.dtype)
         assert (np.all(np.isfinite(out)))
 
     # Check errors params

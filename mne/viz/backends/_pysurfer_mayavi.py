@@ -124,11 +124,11 @@ class _Renderer(_BaseRenderer):
                 l_m = surface.module_manager.scalar_lut_manager
                 if colormap.dtype == np.uint8:
                     l_m.lut.table = colormap
-                elif colormap.dtype == np.float:
+                elif colormap.dtype == np.float64:
                     l_m.load_lut_from_list(colormap)
                 else:
                     raise TypeError('Expected type for colormap values are'
-                                    ' np.float or np.uint8: '
+                                    ' np.float64 or np.uint8: '
                                     '{} was given'.format(colormap.dtype))
             surface.actor.property.shading = shading
             surface.actor.property.backface_culling = backface_culling
@@ -316,9 +316,11 @@ class _Renderer(_BaseRenderer):
 
 def _mlab_figure(**kwargs):
     """Create a Mayavi figure using our defaults."""
+    from .._3d import _get_3d_option
     fig = _import_mlab().figure(**kwargs)
     # If using modern VTK/Mayavi, improve rendering with FXAA
-    if hasattr(getattr(fig.scene, 'renderer', None), 'use_fxaa'):
+    antialias = _get_3d_option('antialias')
+    if antialias and hasattr(getattr(fig.scene, 'renderer', None), 'use_fxaa'):
         fig.scene.renderer.use_fxaa = True
     return fig
 

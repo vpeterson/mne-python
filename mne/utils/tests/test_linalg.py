@@ -9,9 +9,10 @@ from numpy.testing import assert_allclose, assert_array_equal
 from scipy import linalg
 import pytest
 
-from mne.utils import _sym_mat_pow, _reg_pinv
+from mne.utils import _sym_mat_pow, _reg_pinv, requires_version
 
 
+@requires_version('numpy', '1.17')  # pinv bugs
 @pytest.mark.parametrize('dtype', (np.float64, np.complex128))  # real, complex
 @pytest.mark.parametrize('ndim', (2, 3, 4))
 @pytest.mark.parametrize('n', (3, 4))
@@ -73,7 +74,7 @@ def test_pos_semidef_inv(ndim, dtype, n, deficient, reduce_rank, psdef, func):
     want_rank = n - deficient
     assert_array_equal(rank, want_rank)
     # assert equiv with NumPy
-    mat_pinv = np.linalg.pinv(mat, hermitian=True)
+    mat_pinv = np.linalg.pinv(mat)
     if func is _sym_mat_pow:
         if not psdef:
             with pytest.raises(ValueError, match='not positive semi-'):
