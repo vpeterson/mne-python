@@ -85,9 +85,14 @@ def pytest_configure(config):
     ignore:scipy\.gradient is deprecated.*:DeprecationWarning
     ignore:sklearn\.externals\.joblib is deprecated.*:FutureWarning
     ignore:The sklearn.*module.*deprecated.*:FutureWarning
-    ignore:.*TraitTuple.*trait.*handler.*deprecated.*:DeprecationWarning
+    ignore:.*trait.*handler.*deprecated.*:DeprecationWarning
     ignore:.*rich_compare.*metadata.*deprecated.*:DeprecationWarning
     ignore:.*In future, it will be an error for 'np.bool_'.*:DeprecationWarning
+    ignore:.*`np.bool` is a deprecated alias.*:DeprecationWarning
+    ignore:.*`np.int` is a deprecated alias.*:DeprecationWarning
+    ignore:.*`np.float` is a deprecated alias.*:DeprecationWarning
+    ignore:.*`np.object` is a deprecated alias.*:DeprecationWarning
+    ignore:.*`np.long` is a deprecated alias:DeprecationWarning
     ignore:.*Converting `np\.character` to a dtype is deprecated.*:DeprecationWarning
     ignore:.*sphinx\.util\.smartypants is deprecated.*:
     ignore:.*pandas\.util\.testing is deprecated.*:
@@ -273,13 +278,26 @@ def renderer_interactive(backend_name_interactive):
 
 
 def _check_skip_backend(name):
-    from mne.viz.backends.tests._utils import has_mayavi, has_pyvista
+    from mne.viz.backends.tests._utils import (has_mayavi, has_pyvista,
+                                               has_pyqt5, has_imageio_ffmpeg)
     if name == 'mayavi':
         if not has_mayavi():
             pytest.skip("Test skipped, requires mayavi.")
     elif name == 'pyvista':
         if not has_pyvista():
             pytest.skip("Test skipped, requires pyvista.")
+        if not has_imageio_ffmpeg():
+            pytest.skip("Test skipped, requires imageio-ffmpeg")
+    if not has_pyqt5():
+        pytest.skip("Test skipped, requires PyQt5.")
+
+
+@pytest.fixture()
+def renderer_notebook():
+    """Verify that pytest_notebook is installed."""
+    from mne.viz.backends.renderer import _use_test_3d_backend
+    with _use_test_3d_backend('notebook'):
+        yield
 
 
 @pytest.fixture(scope='function', params=[testing._pytest_param()])
@@ -295,7 +313,7 @@ def subjects_dir_tmp(tmpdir):
 @pytest.fixture(scope='session', params=[testing._pytest_param()])
 def _evoked_cov_sphere(_evoked):
     """Compute a small evoked/cov/sphere combo for use with forwards."""
-    evoked = _evoked.copy().pick_types()
+    evoked = _evoked.copy().pick_types(meg=True)
     evoked.pick_channels(evoked.ch_names[::4])
     assert len(evoked.ch_names) == 77
     cov = mne.read_cov(fname_cov)

@@ -124,6 +124,7 @@ Once you have Anaconda installed, the easiest way to install
 MNE-Python with all dependencies is update your base Anaconda environment:
 
 .. _environment file: https://raw.githubusercontent.com/mne-tools/mne-python/master/environment.yml
+.. _server environment file: https://raw.githubusercontent.com/mne-tools/mne-python/master/server_environment.yml
 
 .. collapse:: |linux| Linux
 
@@ -179,6 +180,11 @@ you can create a new dedicated environment (here called "mne") with
 .. collapse:: |hand-stop-o| If you are installing on a headless server...
     :class: danger
 
+    With `pyvista`_:
+    Follow the steps described in :ref:`standard_instructions`
+    but use `server environment file`_ instead of `environment file`_.
+
+    With `mayavi`_:
     Installing `mayavi`_ requires a running `X server`_. If you are
     installing MNE-Python into a computer with no display connected to it, you
     can try removing `mayavi`_ from the :file:`environment.yml` file before
@@ -220,7 +226,7 @@ MNE-Python and its dependencies. Typical output looks like this::
     pandas:        1.0.3
     dipy:          1.1.1
     mayavi:        4.7.2.dev0
-    pyvista:       0.24.1
+    pyvista:       0.25.2 {pyvistaqt=0.1.0}
     vtk:           9.0.0
     PyQt5:         5.14.1
 
@@ -252,7 +258,7 @@ Installing a Python IDE
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Most users find it convenient to write and run their code in an `Integrated
-Development Environment <ide>`_ (IDE). Some popular choices for scientific
+Development Environment`_ (IDE). Some popular choices for scientific
 Python development are:
 
 - `Spyder`_ is an IDE developed by and for scientists who use Python. It is
@@ -294,11 +300,12 @@ Python development are:
 .. LINKS
 
 .. _`mayavi`: https://docs.enthought.com/mayavi/mayavi/
+.. _`pyvista`: https://docs.pyvista.org/
 .. _`X server`: https://en.wikipedia.org/wiki/X_Window_System
 .. _`xvfb`: https://en.wikipedia.org/wiki/Xvfb
 .. _`off-screen rendering`: https://docs.enthought.com/mayavi/mayavi/tips.html#off-screen-rendering
 .. _`rendering with a virtual framebuffer`: https://docs.enthought.com/mayavi/mayavi/tips.html#rendering-using-the-virtual-framebuffer
-.. _`ide`: https://en.wikipedia.org/wiki/Integrated_development_environment
+.. _`integrated development environment`: https://en.wikipedia.org/wiki/Integrated_development_environment
 .. _`spyder`: https://www.spyder-ide.org/
 .. _`visual studio code`: https://code.visualstudio.com/
 .. _`sublimetext`: https://www.sublimetext.com/

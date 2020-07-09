@@ -2963,7 +2963,7 @@ def _plot_masked_image(ax, data, times, mask=None, yvals=None,
         if mask.all():
             t_end = ", all points masked)"
         else:
-            fraction = 1 - (np.float(mask.sum()) / np.float(mask.size))
+            fraction = 1 - (np.float64(mask.sum()) / np.float64(mask.size))
             t_end = ", %0.3g%% of points masked)" % (fraction * 100,)
     else:
         t_end = ")"
@@ -3065,7 +3065,7 @@ def _set_psd_plot_params(info, proj, picks, ax, area_mode):
         kwargs = dict(meg=False, ref_meg=False, exclude=[])
         if name in ('mag', 'grad'):
             kwargs['meg'] = name
-        elif name in ('fnirs_raw', 'fnirs_od', 'hbo', 'hbr'):
+        elif name in ('fnirs_cw_amplitude', 'fnirs_od', 'hbo', 'hbr'):
             kwargs['fnirs'] = name
         else:
             kwargs[name] = True
@@ -3234,7 +3234,7 @@ def _plot_psd(inst, fig, freqs, psd_list, picks_list, titles_list,
         valid_channel_types = [
             'mag', 'grad', 'eeg', 'csd', 'seeg', 'eog', 'ecg',
             'emg', 'dipole', 'gof', 'bio', 'ecog', 'hbo',
-            'hbr', 'misc', 'fnirs_raw', 'fnirs_od']
+            'hbr', 'misc', 'fnirs_cw_amplitude', 'fnirs_od']
         ch_types_used = list()
         for this_type in valid_channel_types:
             if this_type in types:

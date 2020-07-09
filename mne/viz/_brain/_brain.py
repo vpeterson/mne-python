@@ -22,7 +22,8 @@ from .._3d import _process_clim, _handle_time
 from ...surface import mesh_edges
 from ...morph import _hemi_morph
 from ...label import read_label, _read_annot
-from ...utils import _check_option, logger, verbose, fill_doc, _validate_type
+from ...utils import (_check_option, logger, verbose, fill_doc, _validate_type,
+                      use_log_level)
 
 
 class _Brain(object):
@@ -133,7 +134,7 @@ class _Brain(object):
        +---------------------------+--------------+-----------------------+
        | remove_foci               | ✓            |                       |
        +---------------------------+--------------+-----------------------+
-       | remove_labels             | ✓            |                       |
+       | remove_labels             | ✓            | ✓                     |
        +---------------------------+--------------+-----------------------+
        | save_image                | ✓            | ✓                     |
        +---------------------------+--------------+-----------------------+
@@ -145,6 +146,10 @@ class _Brain(object):
        +---------------------------+--------------+-----------------------+
        | TimeViewer                | ✓            | ✓                     |
        +---------------------------+--------------+-----------------------+
+       | enable_depth_peeling      |              | ✓                     |
+       +---------------------------+--------------+-----------------------+
+       | get_picked_points         |              | ✓                     |
+       +---------------------------+--------------+-----------------------+
 
     """
 
@@ -154,7 +159,7 @@ class _Brain(object):
                  views=['lateral'], offset=True, show_toolbar=False,
                  offscreen=False, interaction=None, units='mm',
                  show=True):
-        from ..backends.renderer import backend, _get_renderer
+        from ..backends.renderer import backend, _get_renderer, _get_3d_backend
         from matplotlib.colors import colorConverter
 
         if interaction is not None:
@@ -193,14 +198,16 @@ class _Brain(object):
         if len(size) not in (1, 2):
             raise ValueError('"size" parameter must be an int or length-2 '
                              'sequence of ints.')
-        fig_size = size if len(size) == 2 else size * 2  # 1-tuple to 2-tuple
+        self._size = size if len(size) == 2 else size * 2  # 1-tuple to 2-tuple
 
+        self._notebook = (_get_3d_backend() == "notebook")
         self._hemi = hemi
         self._units = units
         self._subject_id = subject_id
         self._subjects_dir = subjects_dir
         self._views = views
         self._times = None
+        self._label_data = list()
         self._hemi_actors = {}
         self._hemi_meshes = {}
         # for now only one color bar can be added
@@ -219,7 +226,7 @@ class _Brain(object):
         # load geometry for one or both hemispheres as necessary
         offset = None if (not offset or hemi != 'both') else 0.0
 
-        self._renderer = _get_renderer(name=self._title, size=fig_size,
+        self._renderer = _get_renderer(name=self._title, size=self._size,
                                        bgcolor=background,
                                        shape=(n_row, n_col),
                                        fig=figure)
@@ -474,9 +481,7 @@ class _Brain(object):
 
         dt_max = fmax
         dt_min = fmin if center is None else -1 * fmax
-
-        ctable = self.update_lut()
-        self._data['ctable'] = ctable
+        self.update_lut()
 
         # 1) add the surfaces first
         for ri, v in enumerate(self._views):
@@ -493,9 +498,10 @@ class _Brain(object):
                 z=self.geo[hemi].coords[:, 2],
                 triangles=self.geo[hemi].faces,
                 color=None,
-                colormap=ctable,
+                colormap=self._data['ctable'],
                 vmin=dt_min,
                 vmax=dt_max,
+                opacity=alpha,
                 scalars=np.zeros(len(self.geo[hemi].coords)),
             )
             if isinstance(mesh_data, tuple):
@@ -538,6 +544,15 @@ class _Brain(object):
                 self._colorbar_added = True
             self._renderer.set_camera(azimuth=views_dict[v].azim,
                                       elevation=views_dict[v].elev)
+
+        self._update()
+
+    def remove_labels(self):
+        """Remove all the ROI labels from the image."""
+        for data in self._label_data:
+            self._renderer.remove_mesh(data)
+        self._label_data.clear()
+        self._update()
 
     def add_label(self, label, color=None, alpha=1, scalar_thresh=None,
                   borders=False, hemi=None, subdir=None):
@@ -652,19 +667,32 @@ class _Brain(object):
                     'rr': self.geo[hemi].coords,
                     'tris': self.geo[hemi].faces,
                 }
-                self._renderer.contour(surface, label, [1.0], color=color,
-                                       kind='tube')
+                mesh_data = self._renderer.contour(
+                    surface=surface,
+                    scalars=label,
+                    contours=[1.0],
+                    color=color,
+                    kind='tube',
+                )
             else:
-                self._renderer.mesh(x=self.geo[hemi].coords[:, 0],
-                                    y=self.geo[hemi].coords[:, 1],
-                                    z=self.geo[hemi].coords[:, 2],
-                                    triangles=self.geo[hemi].faces,
-                                    scalars=label,
-                                    color=None,
-                                    colormap=ctable,
-                                    backface_culling=False)
+                mesh_data = self._renderer.mesh(
+                    x=self.geo[hemi].coords[:, 0],
+                    y=self.geo[hemi].coords[:, 1],
+                    z=self.geo[hemi].coords[:, 2],
+                    triangles=self.geo[hemi].faces,
+                    scalars=label,
+                    color=None,
+                    colormap=ctable,
+                    backface_culling=False,
+                )
+                if isinstance(mesh_data, tuple):
+                    actor, _ = mesh_data
+                    self.resolve_coincident_topology(actor)
+            self._label_data.append(mesh_data)
             self._renderer.set_camera(azimuth=views_dict[v].azim,
                                       elevation=views_dict[v].elev)
+
+        self._update()
 
     def add_foci(self, coords, coords_as_verts=False, map_surface=None,
                  scale_factor=1, color="white", alpha=1, name=None,
@@ -863,7 +891,7 @@ class _Brain(object):
                 rgb = np.round(np.multiply(colorConverter.to_rgb(color), 255))
                 cmap[:, :3] = rgb.astype(cmap.dtype)
 
-            ctable = cmap.astype(np.float) / 255.
+            ctable = cmap.astype(np.float64) / 255.
 
             mesh_data = self._renderer.mesh(
                 x=self.geo[hemi].coords[:, 0],
@@ -885,6 +913,8 @@ class _Brain(object):
                 _set_colormap_range(actor, cmap.astype(np.uint8),
                                     None)
                 self.resolve_coincident_topology(actor)
+
+        self._update()
 
     def resolve_coincident_topology(self, actor):
         """Resolve z-fighting of overlapping surfaces."""
@@ -915,6 +945,7 @@ class _Brain(object):
         self._renderer.set_camera(azimuth=view.azim,
                                   elevation=view.elev)
         self._renderer.reset_camera()
+        self._update()
 
     def save_image(self, filename, mode='rgb'):
         """Save view from all panels to disk.
@@ -943,7 +974,7 @@ class _Brain(object):
         """
         return self._renderer.screenshot(mode)
 
-    def update_lut(self, fmin=None, fmid=None, fmax=None, alpha=None):
+    def update_lut(self, fmin=None, fmid=None, fmax=None):
         """Update color map.
 
         Parameters
@@ -956,7 +987,7 @@ class _Brain(object):
         fmax : float | None
             Maximum value in colormap.
         """
-        alpha = alpha if alpha is not None else self._data['alpha']
+        from ..backends._pyvista import _set_colormap_range
         center = self._data['center']
         colormap = self._data['colormap']
         transparent = self._data['transparent']
@@ -969,10 +1000,25 @@ class _Brain(object):
         if lims['fmax'] < lims['fmid']:
             lims['fmax'] = lims['fmid']
         self._data.update(lims)
-        self._data['ctable'] = \
-            calculate_lut(colormap, alpha=alpha, center=center,
-                          transparent=transparent, **lims)
-        return self._data['ctable']
+        self._data['ctable'] = np.round(
+            calculate_lut(colormap, alpha=1., center=center,
+                          transparent=transparent, **lims) *
+            255).astype(np.uint8)
+        # update our values
+        rng = self._cmap_range
+        ctable = self._data['ctable']
+        for hemi in ['lh', 'rh']:
+            hemi_data = self._data.get(hemi)
+            if hemi_data is not None:
+                for actor in hemi_data['actor']:
+                    if self._colorbar_added:
+                        scalar_bar = self._renderer.plotter.scalar_bar
+                    else:
+                        scalar_bar = None
+                    _set_colormap_range(actor, ctable, scalar_bar, rng)
+                glyph_actor = hemi_data['glyph_actor']
+                if glyph_actor is not None:
+                    _set_colormap_range(glyph_actor, ctable, None, rng)
 
     def set_data_smoothing(self, n_steps):
         """Set the number of smoothing steps.
@@ -995,10 +1041,11 @@ class _Brain(object):
                         % (len(hemi_data), self.geo[hemi].x.shape[0]))
                 morph_n_steps = 'nearest' if n_steps == 0 else n_steps
                 maps = sparse.eye(len(self.geo[hemi].coords), format='csr')
-                smooth_mat = _hemi_morph(
-                    self.geo[hemi].faces,
-                    np.arange(len(self.geo[hemi].coords)),
-                    vertices, morph_n_steps, maps, warn=False)
+                with use_log_level(False):
+                    smooth_mat = _hemi_morph(
+                        self.geo[hemi].faces,
+                        np.arange(len(self.geo[hemi].coords)),
+                        vertices, morph_n_steps, maps, warn=False)
                 self._data[hemi]['smooth_mat'] = smooth_mat
         self.set_time_point(self._data['time_idx'])
         self._data['smoothing_steps'] = n_steps
@@ -1078,6 +1125,7 @@ class _Brain(object):
                     self.update_glyphs(hemi, vectors)
         self._current_act_data = np.concatenate(current_act_data)
         self._data['time_idx'] = time_idx
+        self._update()
 
     def update_glyphs(self, hemi, vectors):
         from ..backends._pyvista import (_set_colormap_range,
@@ -1085,14 +1133,10 @@ class _Brain(object):
         hemi_data = self._data.get(hemi)
         if hemi_data is not None:
             vertices = hemi_data['vertices']
-            fmin = self._data['fmin']
-            fmid = self._data['fmid']
-            fmax = self._data['fmax']
-            ctable = self.update_lut(fmin=fmin, fmid=fmid, fmax=fmax, alpha=1)
-            ctable = (ctable * 255).astype(np.uint8)
+            ctable = self._data['ctable']
             vector_alpha = self._data['vector_alpha']
             scale_factor = self._data['scale_factor']
-            rng = [fmin, fmax]
+            rng = self._cmap_range
             vertices = slice(None) if vertices is None else vertices
             x, y, z = np.array(self.geo[hemi].coords)[vertices].T
 
@@ -1124,95 +1168,24 @@ class _Brain(object):
                 # the glyphs are now ready to be displayed
                 glyph_actor.VisibilityOn()
 
-    def update_fmax(self, fmax):
-        """Set the colorbar max point."""
-        from ..backends._pyvista import _set_colormap_range
-        ctable = self.update_lut(fmax=fmax)
-        ctable = (ctable * 255).astype(np.uint8)
-        center = self._data['center']
-        fmin = self._data['fmin']
-        for hemi in ['lh', 'rh']:
-            hemi_data = self._data.get(hemi)
-            if hemi_data is not None:
-                for actor in hemi_data['actor']:
-                    dt_max = fmax
-                    dt_min = fmin if center is None else -1 * fmax
-                    rng = [dt_min, dt_max]
-                    if self._colorbar_added:
-                        scalar_bar = self._renderer.plotter.scalar_bar
-                    else:
-                        scalar_bar = None
-                    _set_colormap_range(actor, ctable, scalar_bar, rng)
-                    self._data['fmax'] = fmax
-                    self._data['ctable'] = ctable
+    @property
+    def _cmap_range(self):
+        dt_max = self._data['fmax']
+        if self._data['center'] is None:
+            dt_min = self._data['fmin']
+        else:
+            dt_min = -1 * dt_max
+        rng = [dt_min, dt_max]
+        return rng
 
-    def update_fmid(self, fmid):
-        """Set the colorbar mid point."""
-        from ..backends._pyvista import _set_colormap_range
-        ctable = self.update_lut(fmid=fmid)
-        ctable = (ctable * 255).astype(np.uint8)
-        for hemi in ['lh', 'rh']:
-            hemi_data = self._data.get(hemi)
-            if hemi_data is not None:
-                for actor in hemi_data['actor']:
-                    if self._colorbar_added:
-                        scalar_bar = self._renderer.plotter.scalar_bar
-                    else:
-                        scalar_bar = None
-                    _set_colormap_range(actor, ctable, scalar_bar)
-                    self._data['fmid'] = fmid
-                    self._data['ctable'] = ctable
-
-    def update_fmin(self, fmin):
-        """Set the colorbar min point."""
-        from ..backends._pyvista import _set_colormap_range
-        ctable = self.update_lut(fmin=fmin)
-        ctable = (ctable * 255).astype(np.uint8)
-        center = self._data['center']
-        fmax = self._data['fmax']
-        for hemi in ['lh', 'rh']:
-            hemi_data = self._data.get(hemi)
-            if hemi_data is not None:
-                for actor in hemi_data['actor']:
-                    dt_max = fmax
-                    dt_min = fmin if center is None else -1 * fmax
-                    rng = [dt_min, dt_max]
-                    if self._colorbar_added:
-                        scalar_bar = self._renderer.plotter.scalar_bar
-                    else:
-                        scalar_bar = None
-                    _set_colormap_range(actor, ctable, scalar_bar, rng)
-                    self._data['fmin'] = fmin
-                    self._data['ctable'] = ctable
-
-    def update_fscale(self, fscale):
+    def _update_fscale(self, fscale):
         """Scale the colorbar points."""
-        from ..backends._pyvista import _set_colormap_range
-        center = self._data['center']
         fmin = self._data['fmin'] * fscale
         fmid = self._data['fmid'] * fscale
         fmax = self._data['fmax'] * fscale
-        ctable = self.update_lut(fmin=fmin, fmid=fmid, fmax=fmax)
-        ctable = (ctable * 255).astype(np.uint8)
-        for hemi in ['lh', 'rh']:
-            hemi_data = self._data.get(hemi)
-            if hemi_data is not None:
-                for actor in hemi_data['actor']:
-                    dt_max = fmax
-                    dt_min = fmin if center is None else -1 * fmax
-                    rng = [dt_min, dt_max]
-                    if self._colorbar_added:
-                        scalar_bar = self._renderer.plotter.scalar_bar
-                    else:
-                        scalar_bar = None
-                    _set_colormap_range(actor, ctable, scalar_bar, rng)
-                    self._data['ctable'] = ctable
-                    self._data['fmin'] = fmin
-                    self._data['fmid'] = fmid
-                    self._data['fmax'] = fmax
+        self.update_lut(fmin=fmin, fmid=fmid, fmax=fmax)
 
     def update_auto_scaling(self, restore=False):
-        from ..backends._pyvista import _set_colormap_range
         user_clim = self._data['clim']
         if user_clim is not None and 'lims' in user_clim:
             allow_pos_lims = False
@@ -1237,21 +1210,7 @@ class _Brain(object):
         self._data['center'] = center
         self._data['colormap'] = colormap
         self._data['transparent'] = transparent
-        ctable = self.update_lut(fmin=fmin, fmid=fmid, fmax=fmax)
-        ctable = (ctable * 255).astype(np.uint8)
-        for hemi in ['lh', 'rh']:
-            hemi_data = self._data.get(hemi)
-            if hemi_data is not None:
-                for actor in hemi_data['actor']:
-                    dt_max = fmax
-                    dt_min = fmin if center is None else -1 * fmax
-                    rng = [dt_min, dt_max]
-                    if self._colorbar_added:
-                        scalar_bar = self._renderer.plotter.scalar_bar
-                    else:
-                        scalar_bar = None
-                    _set_colormap_range(actor, ctable, scalar_bar, rng)
-                    self._data['ctable'] = ctable
+        self.update_lut(fmin=fmin, fmid=fmid, fmax=fmax)
 
     def _to_time_index(self, value):
         """Return the interpolated time index of the given time value."""
@@ -1438,7 +1397,7 @@ class _Brain(object):
             edges = mesh_edges(self.geo[hemi].faces)
             edges = edges.tocoo()
             border_edges = label[edges.row] != label[edges.col]
-            show = np.zeros(n_vertices, dtype=np.int)
+            show = np.zeros(n_vertices, dtype=np.int64)
             keep_idx = np.unique(edges.row[border_edges])
             if isinstance(borders, int):
                 for _ in range(borders):
@@ -1469,11 +1428,22 @@ class _Brain(object):
                     for i in range(0, n_col):
                         lt = lut_lst[i]
                         vtk_lut.SetTableValue(i, lt[0], lt[1], lt[2], alpha)
-        self.update_fscale(1.0)
+        self._update_fscale(1.0)
 
     def enable_depth_peeling(self):
         """Enable depth peeling."""
         self._renderer.enable_depth_peeling()
+
+    def _update(self):
+        from ..backends import renderer
+        if renderer.get_3d_backend() in ['pyvista', 'notebook']:
+            if self._notebook and self._renderer.figure.display is not None:
+                self._renderer.figure.display.update()
+
+    def get_picked_points(self):
+        """Return the vertices of the picked points."""
+        if hasattr(self, "time_viewer"):
+            return self.time_viewer.picked_points
 
 
 def _safe_interp1d(x, y, kind='linear', axis=-1, assume_sorted=False):

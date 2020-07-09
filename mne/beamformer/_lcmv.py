@@ -33,10 +33,10 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
 
     Parameters
     ----------
-    info : dict
+    info : instance of Info
         The measurement info to specify the channels to include.
         Bad channels in info['bads'] are not used.
-    forward : dict
+    forward : instance of Forward
         Forward operator.
     data_cov : instance of Covariance
         The data covariance.
@@ -70,16 +70,8 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
     %(depth)s
 
         .. versionadded:: 0.18
-    inversion : 'single' | 'matrix'
-        This determines how the beamformer deals with source spaces in "free"
-        orientation. Such source spaces define three orthogonal dipoles at each
-        source point. When ``inversion='single'``, each dipole is considered
-        as an individual source and the corresponding spatial filter is
-        computed for each dipole separately. When ``inversion='matrix'``, all
-        three dipoles at a source vertex are considered as a group and the
-        spatial filters are computed jointly using a matrix inversion. While
-        ``inversion='single'`` is more stable, ``inversion='matrix'`` is more
-        precise. See section 5 of [3]_.  Defaults to 'matrix'.
+    %(bf_inversion)s
+        Defaults to ``'matrix'``.
     %(verbose)s
 
     Returns
@@ -88,22 +80,24 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
         Dictionary containing filter weights from LCMV beamformer.
         Contains the following keys:
 
+            'kind' : str
+                The type of beamformer, in this case 'LCMV'.
             'weights' : array
                 The filter weights of the beamformer.
             'data_cov' : instance of Covariance
                 The data covariance matrix used to compute the beamformer.
             'noise_cov' : instance of Covariance | None
                 The noise covariance matrix used to compute the beamformer.
-            'whitener' : None | array
+            'whitener' : None | ndarray, shape (n_channels, n_channels)
                 Whitening matrix, provided if whitening was applied to the
                 covariance matrix and leadfield during computation of the
                 beamformer weights.
             'weight_norm' : str | None
                 Type of weight normalization used to compute the filter
                 weights.
-            'pick_ori' : None | 'normal'
-                Orientation selection used in filter computation.
-            'ch_names' : list
+            'pick-ori' : None | 'max-power' | 'normal' | 'vector'
+                The orientation in which the beamformer filters were computed.
+            'ch_names' : list of str
                 Channels used to compute the beamformer.
             'proj' : array
                 Projections used to compute the beamformer.
@@ -113,8 +107,27 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
                 Vertices for which the filter weights were computed.
             'is_free_ori' : bool
                 If True, the filter was computed with free source orientation.
+            'n_sources' : int
+                Number of source location for which the filter weight were
+                computed.
             'src_type' : str
                 Type of source space.
+            'source_nn' : ndarray, shape (n_sources, 3)
+                For each source location, the surface normal.
+            'proj' : ndarray, shape (n_channels, n_channels)
+                Projections used to compute the beamformer.
+            'subject' : str
+                The subject ID.
+            'rank' : int
+                The rank of the data covariance matrix used to compute the
+                beamformer weights.
+            'max-power-ori' : ndarray, shape (n_sources, 3) | None
+                When pick_ori='max-power', this fields contains the estimated
+                direction of maximum power at each source location.
+            'inversion' : 'single' | 'matrix'
+                Whether the spatial filters were computed for each dipole
+                separately or jointly for all dipoles at each vertex using a
+                matrix inversion.
 
     Notes
     -----
@@ -147,6 +160,8 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
     logger.info('Making LCMV beamformer with rank %s' % (rank,))
     del data_rank
     depth = _check_depth(depth, 'depth_sparse')
+    if inversion == 'single':
+        depth['combine_xyz'] = False
 
     is_free_ori, info, proj, vertno, G, whitener, nn, orient_std = \
         _prepare_beamformer_input(
@@ -188,9 +203,10 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
         kind='LCMV', weights=W, data_cov=data_cov, noise_cov=noise_cov,
         whitener=whitener, weight_norm=weight_norm, pick_ori=pick_ori,
         ch_names=ch_names, proj=proj, is_ssp=is_ssp, vertices=vertno,
-        is_free_ori=is_free_ori, nsource=forward['nsource'], src_type=src_type,
-        source_nn=forward['source_nn'].copy(), subject=subject_from,
-        rank=rank_int, max_power_ori=max_power_ori)
+        is_free_ori=is_free_ori, n_sources=forward['nsource'],
+        src_type=src_type, source_nn=forward['source_nn'].copy(),
+        subject=subject_from, rank=rank_int, max_power_ori=max_power_ori,
+        inversion=inversion)
 
     return filters
 
@@ -430,7 +446,7 @@ def apply_lcmv_cov(data_cov, filters, verbose=None):
     sel_names = [data_cov.ch_names[ii] for ii in sel]
     data_cov = pick_channels_cov(data_cov, sel_names)
 
-    n_orient = filters['weights'].shape[0] // filters['nsource']
+    n_orient = filters['weights'].shape[0] // filters['n_sources']
     # Need to project and whiten along both dimensions
     data = _proj_whiten_data(data_cov['data'].T, data_cov['projs'], filters)
     data = _proj_whiten_data(data.T, data_cov['projs'], filters)

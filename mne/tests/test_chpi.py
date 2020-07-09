@@ -270,6 +270,7 @@ def test_calculate_chpi_positions_vv():
         _calculate_chpi_positions(raw)
 
 
+@pytest.mark.slowtest
 def test_calculate_chpi_positions_artemis():
     """Test on 5k artemis data."""
     raw = read_raw_artemis123(art_fname, preload=True)
@@ -454,6 +455,7 @@ def _check_dists(info, cHPI_digs, n_bad=0, bad_low=0.02, bad_high=0.04):
         assert_array_less(bads, bad_high)
 
 
+@pytest.mark.slowtest
 @testing.requires_testing_data
 def test_calculate_chpi_coil_locs_artemis():
     """Test computing just cHPI locations."""

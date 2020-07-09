@@ -14,6 +14,7 @@ from distutils.version import LooseVersion
 from itertools import cycle
 import os
 import os.path as op
+import sys
 import warnings
 from collections.abc import Iterable
 from functools import partial
@@ -22,7 +23,7 @@ import numpy as np
 from scipy import linalg, sparse
 
 from ..defaults import DEFAULTS
-from ..fixes import einsum, _crop_colorbar, _get_img_fdata
+from ..fixes import einsum, _crop_colorbar, _get_img_fdata, _get_args
 from ..io import _loc_to_coil_trans
 from ..io.pick import pick_types, _picks_to_idx
 from ..io.constants import FIFF
@@ -38,10 +39,11 @@ from ..transforms import (_find_trans, apply_trans, rot_to_quat,
                           invert_transform, Transform,
                           read_ras_mni_t, _print_coord_trans)
 from ..utils import (get_subjects_dir, logger, _check_subject, verbose, warn,
-                     has_nibabel, check_version, fill_doc, _pl,
+                     has_nibabel, check_version, fill_doc, _pl, get_config,
                      _ensure_int, _validate_type, _check_option)
 from .utils import (mne_analyze_colormap, _get_color_list,
                     plt_show, tight_layout, figure_nobar, _check_time_unit)
+from .misc import _check_mri
 from ..bem import (ConductorModel, _bem_find_surface, _surf_dict, _surf_name,
                    read_bem_surfaces)
 
@@ -1463,7 +1465,7 @@ def _plot_mpl_stc(stc, subject=None, surface='inflated', hemi='lh',
 
     curv = nib.freesurfer.read_morph_data(
         op.join(subjects_dir, subject, 'surf', '%s.curv' % hemi))[inuse]
-    curv = np.clip(np.array(curv > 0, np.int), 0.33, 0.66)
+    curv = np.clip(np.array(curv > 0, np.int64), 0.33, 0.66)
     params = dict(ax=ax, stc=stc, coords=coords, faces=faces,
                   hemi_idx=hemi_idx, vertices=vertices, e=e,
                   smoothing_steps=smoothing_steps, n_verts=n_verts,
@@ -1631,7 +1633,6 @@ def plot_source_estimates(stc, subject=None, surface='inflated', hemi='lh',
         mayavi, but resorts to matplotlib if mayavi is not available.
 
         .. versionadded:: 0.15.0
-
     spacing : str
         The spacing to use for the source space. Can be ``'ico#'`` for a
         recursively subdivided icosahedron, ``'oct#'`` for a recursively
@@ -1716,12 +1717,15 @@ def plot_source_estimates(stc, subject=None, surface='inflated', hemi='lh',
         "title": title, "cortex": cortex, "size": size,
         "background": background, "foreground": foreground,
         "figure": figure, "subjects_dir": subjects_dir,
-        "views": views
+        "views": views,
     }
-    if _get_3d_backend() == "pyvista":
+    if _get_3d_backend() in ['pyvista', 'notebook']:
         kwargs["show"] = not time_viewer
+    else:
+        kwargs.update(_check_pysurfer_antialias(Brain))
     with warnings.catch_warnings(record=True):  # traits warnings
         brain = Brain(**kwargs)
+    del kwargs
     center = 0. if diverging else None
     for hemi in hemis:
         hemi_idx = 0 if hemi == 'lh' else 1
@@ -1809,10 +1813,20 @@ def _ijk_to_cut_coords(ijk, img):
     return apply_trans(img.affine, ijk)
 
 
+def _load_subject_mri(mri, stc, subject, subjects_dir, name):
+    import nibabel as nib
+    from nibabel.spatialimages import SpatialImage
+    _validate_type(mri, ('path-like', SpatialImage), name)
+    if isinstance(mri, str):
+        subject = _check_subject(stc.subject, subject, True)
+        mri = nib.load(_check_mri(mri, subject, subjects_dir))
+    return mri
+
+
 @verbose
 def plot_volume_source_estimates(stc, src, subject=None, subjects_dir=None,
-                                 mode='stat_map', bg_img=None, colorbar=True,
-                                 colormap='auto', clim='auto',
+                                 mode='stat_map', bg_img='T1.mgz',
+                                 colorbar=True, colormap='auto', clim='auto',
                                  transparent=None, show=True,
                                  initial_time=None, initial_pos=None,
                                  verbose=None):
@@ -1837,9 +1851,10 @@ def plot_volume_source_estimates(stc, src, subject=None, subjects_dir=None,
         The plotting mode to use. Either 'stat_map' (default) or 'glass_brain'.
         For "glass_brain", activation absolute values are displayed
         after being transformed to a standard MNI brain.
-    bg_img : instance of SpatialImage | None
+    bg_img : instance of SpatialImage | str
         The background image used in the nilearn plotting function.
-        If None, it is the T1.mgz file that is found in the subjects_dir.
+        Can also be a string to use the ``bg_img`` file in the subject's
+        MRI directory (default is ``'T1.mgz'``).
         Not used in "glass brain" plotting.
     colorbar : bool, optional
         If True, display a colorbar on the right of the plots.
@@ -2069,11 +2084,9 @@ def plot_volume_source_estimates(stc, src, subject=None, subjects_dir=None,
         bg_img = None  # not used
     else:  # stat_map
         if bg_img is None:
-            subject = _check_subject(stc.subject, subject, True)
-            subjects_dir = get_subjects_dir(subjects_dir=subjects_dir,
-                                            raise_error=True)
-            t1_fname = op.join(subjects_dir, subject, 'mri', 'T1.mgz')
-            bg_img = nib.load(t1_fname)
+            bg_img = 'T1.mgz'
+        bg_img = _load_subject_mri(
+            bg_img, stc, subject, subjects_dir, 'bg_img')
 
     if initial_time is None:
         time_sl = slice(0, None)
@@ -2216,6 +2229,17 @@ def plot_volume_source_estimates(stc, src, subject=None, subjects_dir=None,
     return fig
 
 
+def _check_pysurfer_antialias(Brain):
+    antialias = _get_3d_option('antialias')
+    kwargs = dict()
+    if not antialias:
+        if 'antialias' not in _get_args(Brain):
+            raise ValueError('To turn off antialiasing, PySurfer needs to be '
+                             'updated to version 0.11+')
+        kwargs['antialias'] = antialias
+    return kwargs
+
+
 @verbose
 def plot_vector_source_estimates(stc, subject=None, hemi='lh', colormap='hot',
                                  time_label='auto', smoothing_steps=10,
@@ -2350,12 +2374,20 @@ def plot_vector_source_estimates(stc, subject=None, hemi='lh', colormap='hot',
         smoothing_steps = 1  # Disable smoothing to save time.
 
     title = subject if len(hemis) > 1 else '%s - %s' % (subject, hemis[0])
+    kwargs = {
+        "subject_id": subject, "hemi": hemi, "surf": 'white',
+        "title": title, "cortex": cortex, "size": size,
+        "background": background, "foreground": foreground,
+        "figure": figure, "subjects_dir": subjects_dir,
+        "views": views, "alpha": brain_alpha,
+    }
+    if _get_3d_backend() in ['pyvista', 'notebook']:
+        kwargs["show"] = not time_viewer
+    else:
+        kwargs.update(_check_pysurfer_antialias(Brain))
     with warnings.catch_warnings(record=True):  # traits warnings
-        brain = Brain(subject, hemi=hemi, surf='white',
-                      title=title, cortex=cortex, size=size,
-                      background=background, foreground=foreground,
-                      figure=figure, subjects_dir=subjects_dir,
-                      views=views, alpha=brain_alpha)
+        brain = Brain(**kwargs)
+    del kwargs
     if scale_factor is None:
         # Configure the glyphs scale directly
         width = np.mean([np.ptp(brain.geo[hemi].coords[:, 1])
@@ -2410,10 +2442,10 @@ def plot_vector_source_estimates(stc, subject=None, hemi='lh', colormap='hot',
         if brain_alpha < 1.0:
             for ff in brain._figures:
                 for f in ff:
-                    if f.scene is not None:
+                    if f.scene is not None and sys.platform != 'darwin':
                         f.scene.renderer.use_depth_peeling = True
     else:
-        if brain_alpha < 1.0:
+        if brain_alpha < 1.0 and sys.platform != 'darwin':
             brain.enable_depth_peeling()
 
     _check_time_viewer_compatibility(brain, time_viewer, show_traces)
@@ -3123,3 +3155,36 @@ def plot_brain_colorbar(ax, clim, colormap='auto', transparent=True,
                 'bottom' if orientation == 'vertical' else 'right'):
         ax.spines[key].set_visible(False)
     return cbar
+
+
+_3d_options = dict()
+_3d_default = dict(antialias='true')
+
+
+def set_3d_options(antialias=None):
+    """Set 3D rendering options.
+
+    Parameters
+    ----------
+    antialias : bool | None
+        If not None, set the default full-screen anti-aliasing setting.
+        False is useful when renderers have problems (such as software
+        MESA renderers). This option can also be controlled using an
+        environment variable, e.g., ``MNE_3D_OPTION_ANTIALIAS=false``.
+
+    Notes
+    -----
+    .. versionadded:: 0.21.0
+    """
+    if antialias is not None:
+        _3d_options['antialias'] = str(bool(antialias)).lower()
+
+
+def _get_3d_option(key):
+    try:
+        opt = _3d_options[key]
+    except KeyError:
+        opt = get_config(f'MNE_3D_OPTION_{key.upper()}', _3d_default[key])
+    opt = opt.lower()
+    _check_option(f'3D option {key}', opt, ('true', 'false'))
+    return opt == 'true'

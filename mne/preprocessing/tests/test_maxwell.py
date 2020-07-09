@@ -20,6 +20,7 @@ from mne.datasets import testing
 from mne.forward import use_coil_def
 from mne.io import (read_raw_fif, read_info, read_raw_bti, read_raw_kit,
                     BaseRaw, read_raw_ctf)
+from mne.io.constants import FIFF
 from mne.preprocessing.maxwell import (
     maxwell_filter, _get_n_moments, _sss_basis_basic, _sh_complex_to_real,
     _sh_real_to_complex, _sh_negate, _bases_complex_to_real, _trans_sss_basis,
@@ -117,6 +118,13 @@ def _assert_n_free(raw_sss, lower, upper=None):
         'nfree fail: %s <= %s <= %s' % (lower, n_free, upper)
 
 
+def _assert_mag_coil_type(info, coil_type):
+    __tracebackhide__ = True
+    picks = pick_types(info, meg='mag', exclude=())
+    coil_types = set(info['chs'][pick]['coil_type'] for pick in picks)
+    assert coil_types == {coil_type}
+
+
 def read_crop(fname, lims=(0, None)):
     """Read and crop."""
     return read_raw_fif(fname, allow_maxshield='yes').crop(*lims)
@@ -134,8 +142,12 @@ def test_movement_compensation(tmpdir):
     #
     # Movement compensation, no regularization, no tSSS
     #
+    _assert_mag_coil_type(raw.info, FIFF.FIFFV_COIL_VV_MAG_T3)
+    assert_allclose(raw.info['chs'][2]['cal'], 4.14e-11, rtol=1e-6)
+    raw.info['chs'][2]['coil_type'] = FIFF.FIFFV_COIL_VV_MAG_T2
     raw_sss = maxwell_filter(raw, head_pos=head_pos, origin=mf_head_origin,
                              regularize=None, bad_condition='ignore')
+    _assert_mag_coil_type(raw_sss.info, FIFF.FIFFV_COIL_VV_MAG_T3)
     assert_meg_snr(raw_sss, read_crop(sss_movecomp_fname, lims),
                    4.6, 12.4, chpi_med_tol=58)
     # IO
@@ -649,7 +661,7 @@ def test_fine_calibration():
     raw_sss_bad = maxwell_filter(
         raw_missing, calibration=fine_cal_fname, origin=mf_head_origin,
         regularize=None, bad_condition='ignore')
-    raw_missing.pick_types()  # actually remove bads
+    raw_missing.pick_types(meg=True)  # actually remove bads
     raw_sss_bad.pick_channels(raw_missing.ch_names)  # remove them here, too
     with pytest.warns(RuntimeWarning, match='cal channels not in data'):
         raw_sss_missing = maxwell_filter(
@@ -966,10 +978,12 @@ def test_all():
 def test_triux():
     """Test TRIUX system support."""
     raw = read_crop(tri_fname, (0, 0.999))
-    raw.fix_mag_coil_types()
+    _assert_mag_coil_type(raw.info, FIFF.FIFFV_COIL_VV_MAG_T1)
+    assert_allclose(raw.info['chs'][2]['cal'], 1.33e-10, rtol=1e-6)
     # standard
     with use_coil_def(elekta_def_fname):
         sss_py = maxwell_filter(raw, coord_frame='meg', regularize=None)
+    _assert_mag_coil_type(sss_py.info, FIFF.FIFFV_COIL_VV_MAG_T3)
     assert_meg_snr(sss_py, read_crop(tri_sss_fname), 37, 700)
     # cross-talk
     sss_py = maxwell_filter(raw, coord_frame='meg', regularize=None,
@@ -1061,18 +1075,25 @@ def test_mf_skips():
 
 
 @testing.requires_testing_data
-@pytest.mark.parametrize('fname, bads, annot, add_ch, ignore_ref, want_bads', [
-    # Neuromag data tested against MF
-    (sample_fname, [], False, False, False, ['MEG 2443']),
-    # add 0111 to test picking, add annot to test it, and prepend chs for idx
-    (sample_fname, ['MEG 0111'], True, True, False, ['MEG 2443']),
-    # CTF data seems to be sensitive to linalg lib (?) because some channels
-    # are very close to the limit, so we just check that one shows up
-    (ctf_fname_continuous, [], False, False, False, {'BR1-4304'}),
-    (ctf_fname_continuous, [], False, False, True, ['MLC24-4304']),  # faked
-])
+@pytest.mark.parametrize(
+    ('fname', 'bads', 'annot', 'add_ch', 'ignore_ref', 'want_bads',
+     'return_scores'), [
+        # Neuromag data tested against MF
+        (sample_fname, [], False, False, False, ['MEG 2443'], False),
+        # add 0111 to test picking, add annot to test it, and prepend chs for
+        # idx
+        (sample_fname, ['MEG 0111'], True, True, False, ['MEG 2443'], False),
+        # CTF data seems to be sensitive to linalg lib (?) because some
+        # channels are very close to the limit, so we just check that one shows
+        # up
+        (ctf_fname_continuous, [], False, False, False, {'BR1-4304'}, False),
+        # faked
+        (ctf_fname_continuous, [], False, False, True, ['MLC24-4304'], False),
+        # For `return_scores=True`
+        (sample_fname, ['MEG 0111'], True, True, False, ['MEG 2443'], True)
+    ])
 def test_find_bad_channels_maxwell(fname, bads, annot, add_ch, ignore_ref,
-                                   want_bads):
+                                   want_bads, return_scores):
     """Test automatic bad channel detection."""
     if fname.endswith('.ds'):
         raw = read_raw_ctf(fname).load_data()
@@ -1086,6 +1107,9 @@ def test_find_bad_channels_maxwell(fname, bads, annot, add_ch, ignore_ref,
     raw._data[flat_idx] = 0  # MaxFilter didn't have this but doesn't affect it
     want_flats = [raw.ch_names[flat_idx]]
     raw.apply_gradient_compensation(0)
+
+    min_count = 5
+
     if add_ch:
         raw_eeg = read_raw_fif(fname)
         raw_eeg.pick_types(meg=False, eeg=True, exclude=()).load_data()
@@ -1094,7 +1118,7 @@ def test_find_bad_channels_maxwell(fname, bads, annot, add_ch, ignore_ref,
         assert 0 in pick_types(raw.info, meg=False, eeg=True)
     if ignore_ref:
         # Fake a bad one, otherwise we don't find any
-        assert 42 in pick_types(raw.info, ref_meg=False)
+        assert 42 in pick_types(raw.info, meg=True, ref_meg=False)
         assert raw.ch_names[42:43] == want_bads
         raw._data[42] += np.random.RandomState(0).randn(len(raw.times))
     # maxfilter -autobad on -v -f test_raw.fif -force -cal off -ctc off -regularize off -list -o test_raw.fif -f ~/mne_data/MNE-testing-data/MEG/sample/sample_audvis_trunc_raw.fif  # noqa: E501
@@ -1105,10 +1129,19 @@ def test_find_bad_channels_maxwell(fname, bads, annot, add_ch, ignore_ref,
         assert step == 1502
         raw.annotations.append(step * dt + raw._first_time, dt, 'BAD')
     with catch_logging() as log:
-        got_bads, got_flats = find_bad_channels_maxwell(
+        return_vals = find_bad_channels_maxwell(
             raw, origin=(0., 0., 0.04), regularize=None,
             bad_condition='ignore', skip_by_annotation='BAD', verbose=True,
-            ignore_ref=ignore_ref)
+            ignore_ref=ignore_ref, min_count=min_count,
+            return_scores=return_scores)
+
+    if return_scores:
+        assert len(return_vals) == 3
+        got_bads, got_flats, got_scores = return_vals
+    else:
+        assert len(return_vals) == 2
+        got_bads, got_flats = return_vals
+
     if isinstance(want_bads, list):
         assert got_bads == want_bads  # from MaxFilter
     else:
@@ -1117,6 +1150,55 @@ def test_find_bad_channels_maxwell(fname, bads, annot, add_ch, ignore_ref,
     log = log.getvalue()
     assert 'Interval   1:    0.00' in log
     assert 'Interval   2:    5.00' in log
+
+    if return_scores:
+        meg_chs = raw.copy().pick_types(meg=True, exclude=[]).ch_names
+        ch_types = raw.get_channel_types(meg_chs)
+
+        assert list(got_scores['ch_names']) == meg_chs
+        assert list(got_scores['ch_types']) == ch_types
+        # Check that time is monotonically increasing.
+        assert (np.diff(got_scores['bins'].flatten()) >= 0).all()
+
+        assert (got_scores['scores_flat'].shape ==
+                got_scores['scores_noisy'].shape ==
+                (len(meg_chs), len(got_scores['bins'])))
+
+        assert (got_scores['limits_flat'].shape ==
+                got_scores['limits_noisy'].shape ==
+                (len(meg_chs), 1))
+
+        # Check "flat" scores.
+        scores_flat = got_scores['scores_flat']
+        limits_flat = got_scores['limits_flat']
+        # The following essentially is just this:
+        #     n_segments_below_limit = (scores_flat < limits_flat).sum(-1)
+        # made to work with NaN's in the scores.
+        n_segments_below_limit = np.less(
+            scores_flat, limits_flat,
+            where=np.equal(np.isnan(scores_flat), False),
+            out=np.full_like(scores_flat, fill_value=False)).sum(-1)
+
+        ch_idx = np.where(n_segments_below_limit >=
+                          min(min_count, len(got_scores['bins'])))
+        flats = set(got_scores['ch_names'][ch_idx])
+        assert flats == set(want_flats)
+
+        # Check "noisy" scores.
+        scores_noisy = got_scores['scores_noisy']
+        limits_noisy = got_scores['limits_noisy']
+        # The following essentially is just this:
+        #     n_segments_beyond_limit = (scores_noisy > limits_noisy).sum(-1)
+        # made to work with NaN's in the scores.
+        n_segments_beyond_limit = np.greater(
+            scores_noisy, limits_noisy,
+            where=np.equal(np.isnan(scores_noisy), False),
+            out=np.full_like(scores_noisy, fill_value=False)).sum(-1)
+
+        ch_idx = np.where(n_segments_beyond_limit >=
+                          min(min_count, len(got_scores['bins'])))
+        bads = set(got_scores['ch_names'][ch_idx])
+        assert bads == set(want_bads)
 
 
 run_tests_if_main()
