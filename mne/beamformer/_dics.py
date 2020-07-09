@@ -25,7 +25,7 @@ from ._compute_beamformer import (_check_proj_match, _prepare_beamformer_input,
 def make_dics(info, forward, csd, reg=0.05, noise_csd=None, label=None,
               pick_ori=None, rank=None, inversion='single', weight_norm=None,
               depth=1., real_filter=False, reduce_rank=False,
-              verbose=None):
+              verbose=None, normalize_fwd=None):
     """Compute a Dynamic Imaging of Coherent Sources (DICS) spatial filter.
 
     This is a beamformer filter that can be used to estimate the source power

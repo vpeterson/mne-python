@@ -78,7 +78,7 @@ def _read_coil_def_file(fname, use_registry=True):
     if not use_registry or fname not in _coil_registry:
         big_val = 0.5
         coils = list()
-        with open(fname, 'r') as fid:
+        with open(fname, 'r', encoding='latin1') as fid:
             lines = fid.readlines()
         lines = lines[::-1]
         while len(lines) > 0:
