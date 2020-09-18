@@ -4,16 +4,14 @@ Compute Sepctro-Spatial Decomposition (SDD) spatial filters
 ===========================================================
 In this example, we will compute spatial filters for retaining
 oscillatory brain activity and down-weighting 1/f background signals
-as proposed by [1]_.
+as proposed by :footcite:'NikulinEtAl2011'.
 The idea is to learn spatial filters that separate oscillatory dynamics
 from surrounding non-oscillatory noise based on the covariance in the
 frequency band of interest and the noise covariance absed on surrounding
 frequencies.
 References
 ----------
-.. [1] Nikulin, V. V., Nolte, G., & Curio, G. (2011). A novel method for
-       reliable and fast extraction of neuronal EEG/MEG oscillations on the
-       basis of spatio-spectral decomposition. NeuroImage, 55(4), 1528-1535.
+.. footbibliography::
 """
 # Author: Denis A. Engemann <denis.engemann@gmail.com>
 #         Victoria Peterson <victoriapeterson09@gmail.com>
@@ -57,10 +55,10 @@ class SSD(BaseEstimator, TransformerMixin):
     SSD seeks at maximizing the power at a frequency band of interest while
     simultaneously minimizing it at the flanking (surrounding) frequency bins
     (considered noise). It extremizes the covariance matrices associated to
-    signal and noise [1].
+    signal and noise :footcite:'NikulinEtAl2011'.
 
     SSD can either be used as a dimentionality reduction method or a
-    ‘denoised’ low rank factorization method [2].
+    ‘denoised’ low rank factorization method :footcite:'HaufeEtAl2014'.
 
     Parameters
     ----------
@@ -105,11 +103,7 @@ class SSD(BaseEstimator, TransformerMixin):
         We recomend to use 'full' when working with epoched data.
 
     REFERENCES:
-    [1] Nikulin, V. V., Nolte, G., & Curio, G. (2011). A novel method for
-    reliable and fast extraction of neuronal EEG/MEG oscillations on the basis
-    of spatio-spectral decomposition. NeuroImage, 55(4), 1528-1535.
-    [2] Haufe, S., Dähne, S., & Nikulin, V. V. (2014). Dimensionality reduction
-    for the analysis of brain oscillations. NeuroImage, 101, 583-597.
+.. footbibliography::
     """
 
     def __init__(self, filt_params_signal, filt_params_noise, sampling_freq,
@@ -131,8 +125,8 @@ class SSD(BaseEstimator, TransformerMixin):
         # check freq bands
         if (filt_params_noise['l_freq'] > filt_params_signal['l_freq'] or
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
-            raise ValueError('Wrongly specified frequency bands!\n \
-                The signal band-pass must be within the t noise band-pass!')
+            raise ValueError('Wrongly specified frequency bands!\n'
+                'The signal band-pass must be within the t noise band-pass!')
 
         self.freqs_signal = (filt_params_signal['l_freq'],
                              filt_params_signal['h_freq'])
@@ -254,7 +248,7 @@ class SSD(BaseEstimator, TransformerMixin):
     def spectral_ratio_ssd(self, ssd_sources):
         """
         Spectral ratio measure for best n_components selection
-        See Nikulin 2011, Eq. (24).
+        See :footcite:'NikulinEtAl2011', Eq. (24).
 
         Parameters
         ----------
@@ -343,14 +337,14 @@ class SSD(BaseEstimator, TransformerMixin):
         This procedure will reconstruct M/EEG signals from which the dynamics
         described by the excluded components is subtracted
         (denoised by low-rank factorization).
-        See [2] Haufe et al. for more information.
+        See :footcite:'HaufeEtAl2014' for more information.
 
         The data is processed in place.
 
         Parameters
         ----------
         inst : instance of Raw or Epochs
-            The data to be processed. The instance is modified inplace.
+             The data to be processed. The instance is modified inplace.
             
         Returns
         -------
