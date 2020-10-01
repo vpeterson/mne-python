@@ -57,7 +57,7 @@ class SSD(BaseEstimator, TransformerMixin):
     (considered noise). It extremizes the covariance matrices associated to
     signal and noise :footcite:'NikulinEtAl2011'.
 
-    SSD can either be used as a dimentionality reduction method or a
+    SSD can either be used as a dimensionality reduction method or a
     ‘denoised’ low rank factorization method :footcite:'HaufeEtAl2014'.
 
     Parameters
@@ -73,37 +73,39 @@ class SSD(BaseEstimator, TransformerMixin):
         If not None (same as 'empirical'), allow regularization for
         covariance estimation. If float, shrinkage is used
         (0 <= shrinkage <= 1). For str options, estimator will be passed to
-        method to mne.compute_covariance().
+        method to :func:'mne.compute_covariance'.
     n_components : int | None (default None)
         The number of components to decompose the signals.
-        If n_components is None no dimentionality reduction is made, and the
+        If n_components is None no dimensionality reduction is made, and the
         transformed data is projected in the whole source space.
    picks: array| int | None  (default None)
        Indeces of good-channels. Can be the output of mne.pick_types.
    sort_by_spectral_ratio: bool (default True)
        if set to True, the components are sorted according
        to the spectral ratio.
-       See [1] Nikulin 2011, Eq. (24)
+       See , Eq. (24) in :footcite:'NikulinEtAl2011'
    return_filtered : bool (default False)
         If return_filtered is True, data is bandpassed and projected onto
         the SSD components.
    n_fft: int (default None)
        if sort_by_spectral_ratio is set to True, then the sources will be
        sorted accordinly to their spectral ratio which is calculated based on
-       "psd_array_welch" function. The n_fft parameter set the length of FFT
-       used. See mne.time_frequency.psd_array_welch for more information.
+       :func:'psd_array_welch' function. The n_fft parameter set the length of
+       FFT used. See :func:'mne.time_frequency.psd_array_welch' for more
+       information.
    cov_method_params : dict | None (default None)
-        As in mne.decoding.SPoC
+        As in :func:'mne.decoding.SPoC'
         The default is None.
    rank : None | dict | ‘info’ | ‘full’
-        As in mne.decoding.SPoC
+        As in :func:'mne.decoding.SPoC'
         This controls the rank computation that can be read from the
         measurement info or estimated from the data.
-        See Notes of mne.compute_rank() for details.
+        See Notes of :func:'mne.compute_rank' for details.
         We recomend to use 'full' when working with epoched data.
 
-    REFERENCES:
-.. footbibliography::
+    References
+    ----------
+    .. footbibliography::
     """
 
     def __init__(self, filt_params_signal, filt_params_noise, sampling_freq,
@@ -117,7 +119,8 @@ class SSD(BaseEstimator, TransformerMixin):
             key = ('signal', 'noise')[dd]
             if param + '_freq' not in dicts[key]:
                 raise ValueError(
-                    "'%%' must be defined in filter parameters for %s" % key)
+                    "%s must be defined in filter parameters for %s"
+                    % (param+'_freq', key))
             val = dicts[key][param + '_freq']
             if not isinstance(val, (int, float)):
                 raise ValueError(
@@ -126,7 +129,7 @@ class SSD(BaseEstimator, TransformerMixin):
         if (filt_params_noise['l_freq'] > filt_params_signal['l_freq'] or
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
             raise ValueError('Wrongly specified frequency bands!\n'
-                'The signal band-pass must be within the t noise band-pass!')
+                    'The signal band-pass must be within the noise band-pass!')
 
         self.freqs_signal = (filt_params_signal['l_freq'],
                              filt_params_signal['h_freq'])
@@ -170,22 +173,17 @@ class SSD(BaseEstimator, TransformerMixin):
             # data is epoched
             # part of the following code is copied from mne csp
             n_epochs, n_channels, n_samples = inst.shape
-            self.max_components = n_channels
             # reshape for filtering
             X_aux = np.reshape(inst, [n_epochs, n_channels * n_samples])
             inst_signal = filter_data(
                 X_aux, self.sampling_freq, **self.filt_params_signal)
-            # rephase for filtering
-            X_aux = np.reshape(inst, [n_epochs, n_channels * n_samples])
             inst_noise = filter_data(
                 X_aux, self.sampling_freq, **self.filt_params_noise)
             # subtract signal:
             inst_noise -= inst_signal
-            # Estimate single trial covariance
             # reshape to original shape
             inst_signal = np.reshape(
                 inst_signal, [n_epochs, n_channels, n_samples])
-            # reshape to original shape
             inst_noise = np.reshape(
                 inst_noise, [n_epochs, n_channels, n_samples])
         return inst_signal, inst_noise
@@ -195,7 +193,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        inst : instance of Raw data or array with shape
+        inst : instance of Raw data, Epoch data or array with shape
             (n_epochs, n_channels, n_times)
             The data on which to estimate the SSD.
 
@@ -216,14 +214,18 @@ class SSD(BaseEstimator, TransformerMixin):
             del inst_noise
             del inst_signal
         else:
-            if not isinstance(inst, np.ndarray):
+            if isinstance(inst, BaseEpochs):
+                X = inst.get_data()[:, self.picks]
+            elif isinstance(inst, np.ndarray):
+                X = inst
+            else:
                 raise NotImplementedError()
-            self._check_X(inst)
-            # data X is epoched
+            self._check_X(X)
+            # data is epoched
             # part of the following code is copied from mne csp
-            n_epochs, n_channels, n_samples = inst.shape
+            n_epochs, n_channels, n_samples = X.shape
             self.max_components = n_channels
-            X_s, X_n = self.filter_data(inst)
+            X_s, X_n = self.filter_data(X)
             covs = np.empty((n_epochs, n_channels, n_channels))
             for ii, epoch in enumerate(X_s):
                 covs[ii] = _regularized_covariance(epoch, reg=self.estimator,
@@ -283,12 +285,13 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        inst : instance of Raw or Epochs (n_epochs, n_channels, n_times)
+        inst : instance of Raw, Epochs or ndarray of shape
+            (n_epochs, n_channels, n_times)
             The data to be processed. The instance is modified inplace.
 
         Returns
         -------
-        X_ssd : instance of Raw or Epochs
+        X_ssd : instance of Raw, Epochs or np.array
             The processed data.
         """
         if self.filters_ is None:
@@ -299,13 +302,16 @@ class SSD(BaseEstimator, TransformerMixin):
             data = inst.get_data()
             X_ssd = np.dot(self.filters_.T, data[self.picks_])
         else:
-            if not isinstance(inst, np.ndarray):
+            if isinstance(inst, BaseEpochs):
+                X = inst.get_data()[:, self.picks]
+            elif isinstance(inst, np.ndarray):
+                X = inst
+            else:
                 raise NotImplementedError()
-            self._check_X(inst)
-            data = inst
+            self._check_X(X)
             # project data on source space
             X_ssd = np.asarray(
-                    [np.dot(self.filters_.T, epoch) for epoch in data])
+                    [np.dot(self.filters_.T, epoch) for epoch in X])
         if self.sort_by_spectral_ratio:
             self.spec_ratio, self.sorter_spec = self.spectral_ratio_ssd(
                 ssd_sources=X_ssd)
@@ -315,8 +321,6 @@ class SSD(BaseEstimator, TransformerMixin):
             if isinstance(inst, BaseRaw):
                 X_ssd = X_ssd[self.sorter_spec]
             else:
-                if not isinstance(inst, np.ndarray):
-                    raise NotImplementedError()
                 X_ssd = X_ssd[:, self.sorter_spec, :]
             if self.n_components is None:
                 n_components = self.max_components
@@ -326,14 +330,12 @@ class SSD(BaseEstimator, TransformerMixin):
                 if isinstance(inst, BaseRaw):
                     X_ssd = X_ssd[:n_components]
                 else:
-                    if not isinstance(inst, np.ndarray):
-                        raise NotImplementedError()
                     X_ssd = X_ssd[:, :n_components, :]
                 return X_ssd
 
     def apply(self, inst):
         """Remove selected components from the signal.
-        
+
         This procedure will reconstruct M/EEG signals from which the dynamics
         described by the excluded components is subtracted
         (denoised by low-rank factorization).
@@ -343,12 +345,12 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        inst : instance of Raw or Epochs
+        inst : instance of Raw, Epochs or ndarray
              The data to be processed. The instance is modified inplace.
-            
+
         Returns
         -------
-        X : instance of Raw or Epochs
+        X : instance of Raw, Epochs or ndarray
             The processed data.
         """
         X = np.empty_like(inst)
@@ -356,11 +358,7 @@ class SSD(BaseEstimator, TransformerMixin):
         pick_patterns = self.patterns_[:self.n_components].T
         if isinstance(inst, BaseRaw):
             X = np.dot(pick_patterns, X_ssd)
-
         else:
-            if not isinstance(inst, np.ndarray):
-                raise NotImplementedError()
-            self._check_X(inst)
             X = np.asarray([np.dot(pick_patterns, epoch) for epoch in X_ssd])
         return X
 
@@ -411,7 +409,7 @@ layout = read_layout('CTF151.lay')
 pattern = mne.EvokedArray(
     data=ssd.patterns_[:4].T, info=mne.pick_info(raw.info, ssd.picks_))
 pattern.plot_topomap(units=dict(mag='A.U.'),
-                     time_format='')
+                     time_format='', layout=layout)
 
 # The topographies suggest that we picked up a parietal alpha generator.
 
