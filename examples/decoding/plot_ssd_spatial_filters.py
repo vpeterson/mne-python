@@ -208,9 +208,11 @@ class SSD(BaseEstimator, TransformerMixin):
             self.max_components = len(self.picks_)
             inst_signal, inst_noise = self.filter_data(inst)
             cov_signal = compute_raw_covariance(inst_signal, picks=self.picks_,
-                method=self.estimator, rank=self.rank)
+                                                method=self.estimator,
+                                                rank=self.rank)
             cov_noise = compute_raw_covariance(inst_noise, picks=self.picks_,
-                method=self.estimator, rank=self.rank)
+                                               method=self.estimator,
+                                               rank=self.rank)
             del inst_noise
             del inst_signal
         else:
