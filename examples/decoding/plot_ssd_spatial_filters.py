@@ -4,7 +4,7 @@ Compute Sepctro-Spatial Decomposition (SDD) spatial filters
 ===========================================================
 In this example, we will compute spatial filters for retaining
 oscillatory brain activity and down-weighting 1/f background signals
-as proposed by :footcite:'NikulinEtAl2011'.
+as proposed by :footcite:`NikulinEtAl2011`.
 The idea is to learn spatial filters that separate oscillatory dynamics
 from surrounding non-oscillatory noise based on the covariance in the
 frequency band of interest and the noise covariance absed on surrounding
@@ -55,10 +55,10 @@ class SSD(BaseEstimator, TransformerMixin):
     SSD seeks at maximizing the power at a frequency band of interest while
     simultaneously minimizing it at the flanking (surrounding) frequency bins
     (considered noise). It extremizes the covariance matrices associated to
-    signal and noise :footcite:'NikulinEtAl2011'.
+    signal and noise :footcite:`NikulinEtAl2011`.
 
     SSD can either be used as a dimensionality reduction method or a
-    ‘denoised’ low rank factorization method :footcite:'HaufeEtAl2014'.
+    ‘denoised’ low rank factorization method :footcite:`HaufeEtAl2014`.
 
     Parameters
     ----------
@@ -73,7 +73,7 @@ class SSD(BaseEstimator, TransformerMixin):
         If not None (same as 'empirical'), allow regularization for
         covariance estimation. If float, shrinkage is used
         (0 <= shrinkage <= 1). For str options, estimator will be passed to
-        method to :func:'mne.compute_covariance'.
+        method to :func:`mne.compute_covariance`.
     n_components : int | None (default None)
         The number of components to decompose the signals.
         If n_components is None no dimensionality reduction is made, and the
@@ -83,24 +83,24 @@ class SSD(BaseEstimator, TransformerMixin):
    sort_by_spectral_ratio: bool (default True)
        if set to True, the components are sorted according
        to the spectral ratio.
-       See , Eq. (24) in :footcite:'NikulinEtAl2011'
+       See , Eq. (24) in :footcite:`NikulinEtAl2011`
    return_filtered : bool (default False)
         If return_filtered is True, data is bandpassed and projected onto
         the SSD components.
    n_fft: int (default None)
        if sort_by_spectral_ratio is set to True, then the sources will be
        sorted accordinly to their spectral ratio which is calculated based on
-       :func:'psd_array_welch' function. The n_fft parameter set the length of
-       FFT used. See :func:'mne.time_frequency.psd_array_welch' for more
+       :func:`psd_array_welch` function. The n_fft parameter set the length of
+       FFT used. See :func:`mne.time_frequency.psd_array_welch` for more
        information.
    cov_method_params : dict | None (default None)
-        As in :func:'mne.decoding.SPoC'
+        As in :func:`mne.decoding.SPoC`
         The default is None.
    rank : None | dict | ‘info’ | ‘full’
-        As in :func:'mne.decoding.SPoC'
+        As in :func:`mne.decoding.SPoC`
         This controls the rank computation that can be read from the
         measurement info or estimated from the data.
-        See Notes of :func:'mne.compute_rank' for details.
+        See Notes of :func:`mne.compute_rank` for details.
         We recomend to use 'full' when working with epoched data.
 
     References
@@ -252,7 +252,7 @@ class SSD(BaseEstimator, TransformerMixin):
     def spectral_ratio_ssd(self, ssd_sources):
         """
         Spectral ratio measure for best n_components selection
-        See :footcite:'NikulinEtAl2011', Eq. (24).
+        See :footcite:`NikulinEtAl2011`, Eq. (24).
 
         Parameters
         ----------
@@ -341,7 +341,7 @@ class SSD(BaseEstimator, TransformerMixin):
         This procedure will reconstruct M/EEG signals from which the dynamics
         described by the excluded components is subtracted
         (denoised by low-rank factorization).
-        See :footcite:'HaufeEtAl2014' for more information.
+        See :footcite:`HaufeEtAl2014` for more information.
 
         The data is processed in place.
 
@@ -355,7 +355,6 @@ class SSD(BaseEstimator, TransformerMixin):
         X : instance of Raw, Epochs or ndarray
             The processed data.
         """
-        X = np.empty_like(inst)
         X_ssd = self.transform(inst)
         pick_patterns = self.patterns_[:self.n_components].T
         if isinstance(inst, BaseRaw):
