@@ -342,7 +342,7 @@ X = raw.copy().pick(picks_raw).get_data()
 
 ssd.fit(X)
 
-# Let's investigate spatila filter with max power ratio.
+# Let's investigate spatial filter with max power ratio.
 # We willl first inspect the topographies.
 # According to Nikulin et al 2011 this is done.
 # by either inverting the filters (W^{-1}) or by multiplying the noise
