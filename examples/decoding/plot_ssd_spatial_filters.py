@@ -81,7 +81,7 @@ class SSD(BaseEstimator, TransformerMixin):
         The number of components to extract from the signal.
         If n_components is None, no dimensionality reduction is applied, and the
         transformed data is projected in the whole source space.
-    sort_by_spectral_ratio: bool (default True)
+    sort_by_spectral_ratio: bool (default False)
        if set to True, the components are sorted according
        to the spectral ratio.
        See Eq. (24) in :footcite:`NikulinEtAl2011`
@@ -118,7 +118,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
     def __init__(self, info, filt_params_signal, filt_params_noise,
                  estimator='oas', n_components=None, picks=None,
-                 sort_by_spectral_ratio=True, return_filtered=False,
+                 sort_by_spectral_ratio=False, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
         """Initialize instance"""
 
@@ -265,19 +265,19 @@ class SSD(BaseEstimator, TransformerMixin):
         else:
             raise NotImplementedError()
 
+        # We assume that ordering by spectral ratio is more important
+        # than the inital ordering. This is why we apply component picks
+        # after ordering.
         if self.sort_by_spectral_ratio:
-            self.spec_ratio, self.sorter_spec = self.spectral_ratio_ssd(
+            _, sorter_spec = self.get_spectral_ratio(
                 ssd_sources=X_ssd)
-            self.filters_ = self.filters_[:, self.sorter_spec]
-            self.patterns_ = self.patterns_[self.sorter_spec]
-
             if X.ndim == 2:
-                X_ssd = X_ssd[self.sorter_spec][:self.n_components]
+                X_ssd = X_ssd[sorter_spec][:self.n_components]
             else:
-                X_ssd = X_ssd[:, self.sorter_spec, :][:, :self.n_components, :]
+                X_ssd = X_ssd[:, sorter_spec, :][:, :self.n_components, :]
         return X_ssd
 
-    def spectral_ratio_ssd(self, ssd_sources):
+    def get_spectral_ratio(self, ssd_sources):
         """
         Spectral ratio measure for best n_components selection
         See :footcite:`NikulinEtAl2011`, Eq. (24).
@@ -331,7 +331,11 @@ class SSD(BaseEstimator, TransformerMixin):
             The processed data.
         """
         X_ssd = self.transform(inst)
-        pick_patterns = self.patterns_[:self.n_components].T
+        sorter_spec = Ellipsis
+        if self.sort_by_spectral_ratio:
+            _, sorter_spec = self.get_spectral_ratio(ssd_sources=X_ssd)
+
+        pick_patterns = self.patterns_[sorter_spec, :self.n_components].T
         if isinstance(inst, BaseRaw):
             X = np.dot(pick_patterns, X_ssd)
         else:
@@ -379,18 +383,21 @@ ssd_sources = ssd.transform(X=raw.get_data())
 psd, freqs = mne.time_frequency.psd_array_welch(
     ssd_sources, sfreq=raw.info['sfreq'], n_fft=4096)
 
-# get spec_ratio information
-spec_ratio = ssd.spec_ratio
-sorter = ssd.sorter_spec
+# get spec_ratio information (already sorted)
+spec_ratio, sorter = ssd.get_spectral_ratio(ssd_sources)
 
 # plot spectral ratio (see Eq. 24 in Nikulin 2011)
 plt.figure()
 plt.plot(spec_ratio, color='black')
-plt.plot(spec_ratio[sorter], color='orange', label='sorted eigenvalues')
+plt.plot(spec_ratio[sorter], color='orange')
 plt.xlabel("Eigenvalue Index")
 plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
 plt.axhline(1, linestyle='--')
+
+# We can see that the inital sorting based on the eigenvalues
+# was already quite good. However, when using few components only
+# The sorting mighte make a difference.
 
 # Let's also look at tbe power spectrum of that source and compare it to
 # to the power spectrum of the source with lowest SNR.
