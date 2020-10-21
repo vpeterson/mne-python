@@ -84,7 +84,7 @@ class SSD(BaseEstimator, TransformerMixin):
     sort_by_spectral_ratio: bool (default True)
        if set to True, the components are sorted according
        to the spectral ratio.
-       See , Eq. (24) in :footcite:`NikulinEtAl2011`
+       See Eq. (24) in :footcite:`NikulinEtAl2011`
     return_filtered : bool (default False)
         If return_filtered is True, data is bandpassed and projected onto
         the SSD components.
@@ -128,7 +128,7 @@ class SSD(BaseEstimator, TransformerMixin):
             if param + '_freq' not in dicts[key]:
                 raise ValueError(
                     "%s must be defined in filter parameters for %s"
-                    % (param+'_freq', key))
+                    % (param + '_freq', key))
             val = dicts[key][param + '_freq']
             if not isinstance(val, (int, float)):
                 raise ValueError(
