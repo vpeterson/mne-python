@@ -26,7 +26,6 @@ from mne.datasets.fieldtrip_cmc import data_path
 from mne.decoding import TransformerMixin, BaseEstimator
 
 from mne.io.base import BaseRaw
-from mne.epochs import BaseEpochs
 from mne.utils import _time_mask
 from mne.cov import (_regularized_covariance)
 from mne.filter import filter_data
@@ -85,7 +84,7 @@ class SSD(BaseEstimator, TransformerMixin):
        if set to True, the components are sorted according
        to the spectral ratio.
        See Eq. (24) in :footcite:`NikulinEtAl2011`
-    return_filtered : bool (default False)
+    return_filtered : bool (default True)
         If return_filtered is True, data is bandpassed and projected onto
         the SSD components.
     n_fft: int (default None)
@@ -118,7 +117,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
     def __init__(self, info, filt_params_signal, filt_params_noise,
                  estimator='oas', n_components=None, picks=None,
-                 sort_by_spectral_ratio=False, return_filtered=False,
+                 sort_by_spectral_ratio=True, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
         """Initialize instance"""
 
@@ -353,6 +352,8 @@ class SSD(BaseEstimator, TransformerMixin):
 # prepare data
 
 ssd = SSD(info=raw.info,
+          sort_by_spectral_ratio=False, # True is recommended, here we need it
+                                        # for our example. 
           filt_params_signal=dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
                                   l_trans_bandwidth=1, h_trans_bandwidth=1,
                                   fir_design='firwin'),
@@ -389,7 +390,7 @@ spec_ratio, sorter = ssd.get_spectral_ratio(ssd_sources)
 # plot spectral ratio (see Eq. 24 in Nikulin 2011)
 plt.figure()
 plt.plot(spec_ratio, color='black')
-plt.plot(spec_ratio[sorter], color='orange')
+plt.plot(spec_ratio[sorter], color='orange', label='sorted eigenvalues')
 plt.xlabel("Eigenvalue Index")
 plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
