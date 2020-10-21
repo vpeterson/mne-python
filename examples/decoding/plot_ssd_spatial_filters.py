@@ -62,7 +62,7 @@ class SSD(BaseEstimator, TransformerMixin):
     Parameters
     ----------
     filt_params_signal : dict
-        Filtering for the frequencies of interst.
+        Filtering for the frequencies of interest.
     filt_params_noise  : dict
         Filtering for the frequencies of non-interest.
     sampling_freq : float
@@ -75,7 +75,7 @@ class SSD(BaseEstimator, TransformerMixin):
         method to :func:`mne.compute_covariance`.
     n_components : int | None (default None)
         The number of components to extract from the signal.
-        If n_components is None no dimensionality reduction is applied, and the
+        If n_components is None, no dimensionality reduction is applied, and the
         transformed data is projected in the whole source space.
     sort_by_spectral_ratio: bool (default True)
        if set to True, the components are sorted according
@@ -342,12 +342,13 @@ X = raw.copy().pick(picks_raw).get_data()
 
 ssd.fit(X)
 
-# Let's investigate spatial filter with max power ratio.
-# We willl first inspect the topographies.
+
+# Let's investigate spatila filter with max power ratio.
+# We will first inspect the topographies.
 # According to Nikulin et al 2011 this is done.
 # by either inverting the filters (W^{-1}) or by multiplying the noise
 # cov with the filters Eq. (22) (C_n W)^t.
-# We rely on the inversion apprpach here.
+# We rely on the inversion approach here.
 
 plt.close('all')
 pattern = mne.EvokedArray(data=ssd.patterns_[:4].T,
@@ -393,7 +394,7 @@ plt.xlabel("log(frequency)")
 plt.ylabel("log(power)")
 plt.legend()
 
-# We can clearly see that the selected component enjoyes an SNR that is
+# We can clearly see that the selected component enjoys an SNR that is
 # way above the average powe spectrum.
 
 # Epoched data
