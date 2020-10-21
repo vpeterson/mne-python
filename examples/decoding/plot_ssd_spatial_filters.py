@@ -43,8 +43,11 @@ fname = data_path() + '/SubjectCMC.ds'
 raw = mne.io.read_raw_ctf(fname)
 raw.crop(50., 110.).load_data()  # crop for memory purposes
 raw.resample(sfreq=250)
-sf = raw.info['sfreq']
 
+picks_raw = mne.pick_types(
+    raw.info, meg=True, eeg=False, ref_meg=False)
+raw.pick(picks_raw)
+    
 freqs_sig = 9, 12
 freqs_noise = 8, 13
 
@@ -61,12 +64,13 @@ class SSD(BaseEstimator, TransformerMixin):
 
     Parameters
     ----------
+    info : instance of mne.Info
+        The info object containing the channel and sampling information.
+        It must match the input data.
     filt_params_signal : dict
         Filtering for the frequencies of interest.
     filt_params_noise  : dict
         Filtering for the frequencies of non-interest.
-    sampling_freq : float
-        sampling frequency (in Hz) of the recordings.
     estimator : float | str | None (default 'oas')
         Which covariance estimator to use.
         If not None (same as 'empirical'), allow regularization for
@@ -100,12 +104,19 @@ class SSD(BaseEstimator, TransformerMixin):
         See Notes of :func:`mne.compute_rank` for details.
         We recomend to use 'full' when working with epoched data.
 
+    Attributes
+    ----------
+    filters_ : array, shape(n_channels, n_components)
+        The spatial filters to be multipled with the signal.
+    patterns_ : array, shape(n_components, n_channels)
+        The patterns for reconstructing the signal from the filtered data.
+
     References
     ----------
     .. footbibliography::
     """
 
-    def __init__(self, filt_params_signal, filt_params_noise, sampling_freq,
+    def __init__(self, info, filt_params_signal, filt_params_noise,
                  estimator='oas', n_components=None, picks=None,
                  sort_by_spectral_ratio=True, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
@@ -127,7 +138,13 @@ class SSD(BaseEstimator, TransformerMixin):
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
             raise ValueError('Wrongly specified frequency bands!\n'
                     'The signal band-pass must be within the noise band-pass!')
-
+        ch_types = {mne.io.pick.channel_type(raw.info, ii)
+                    for ii in range(info['nchan'])}
+        if len(ch_types) > 1:
+            raise ValueError("At this point SSD only supports fitting "
+                             "single channel types. Your info has %i types" %
+                             (len(ch_types)))
+        self.info = info
         self.freqs_signal = (filt_params_signal['l_freq'],
                              filt_params_signal['h_freq'])
         self.freqs_noise = (filt_params_noise['l_freq'],
@@ -136,7 +153,7 @@ class SSD(BaseEstimator, TransformerMixin):
         self.filt_params_noise = filt_params_noise
         self.sort_by_spectral_ratio = sort_by_spectral_ratio
         if n_fft is None:
-            self.n_fft = int(sampling_freq)
+            self.n_fft = int(self.info['sfreq'])
         else:
             self.n_fft = int(n_fft)
         self.picks_ = (Ellipsis if picks is None else picks) 
@@ -144,7 +161,6 @@ class SSD(BaseEstimator, TransformerMixin):
         self.estimator = estimator
         self.n_components = n_components
         self.rank = rank
-        self.sampling_freq = sampling_freq
         self.cov_method_params = cov_method_params
 
     def _check_X(self, X):
@@ -156,6 +172,16 @@ class SSD(BaseEstimator, TransformerMixin):
             raise ValueError('X must have at least 2 dimensions.')
         elif X.ndim > 3:
             raise ValueError('X must have at most 3 dimensions.')
+
+        n_chan = 0
+        if X.ndim == 2:
+            n_chan = X.shape[0]
+        elif X.ndim == 3:
+            n_chan = X.shape[1]
+        if n_chan != self.info['nchan']:
+            raise ValueError('Info must match the input data.'
+                             'Found %i channels but expected %i.' % (
+                                n_chan, self.info['nchan']))
 
     def fit(self, X, y=None):
         """Estimate the SSD decomposition on raw or epoched data.
@@ -184,9 +210,9 @@ class SSD(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
         X_signal = filter_data(
-            X_aux, self.sampling_freq, **self.filt_params_signal)
+            X_aux, self.info['sfreq'], **self.filt_params_signal)
         X_noise = filter_data(
-            X_aux, self.sampling_freq, **self.filt_params_noise)
+            X_aux, self.info['sfreq'], **self.filt_params_noise)
 
         X_noise -= X_signal 
         if X.ndim == 3:
@@ -194,11 +220,11 @@ class SSD(BaseEstimator, TransformerMixin):
             X_noise = np.hstack(X_noise)
 
         cov_signal = _regularized_covariance(
-            X_signal, reg=self.estimator,
-            method_params=self.cov_method_params, rank=self.rank)
+            X_signal, reg=self.estimator, method_params=self.cov_method_params,
+            rank=self.rank, info=self.info)
         cov_noise = _regularized_covariance(
-            X_noise, reg=self.estimator,
-            method_params=self.cov_method_params, rank=self.rank)
+            X_noise, reg=self.estimator, method_params=self.cov_method_params,
+            rank=self.rank, info=self.info)
    
         eigvals_, eigvects_ = eigh(cov_signal, cov_noise)
         # sort in descencing order
@@ -233,8 +259,9 @@ class SSD(BaseEstimator, TransformerMixin):
             X_ssd = np.dot(self.filters_.T, X[self.picks_])
         elif X.ndim == 3:
             # project data on source space
-            X_ssd = np.asarray(
-                    [np.dot(self.filters_.T, x) for x in X[:, self.picks_]])
+            X_ssd = np.empty_like(X)
+            for ii, x in enumerate(X[:, self.picks_]):
+                X_ssd[ii] = np.dot(self.filters_.T, x)
         else:
             raise NotImplementedError()
 
@@ -245,19 +272,10 @@ class SSD(BaseEstimator, TransformerMixin):
             self.patterns_ = self.patterns_[self.sorter_spec]
 
             if X.ndim == 2:
-                X_ssd = X_ssd[self.sorter_spec]
+                X_ssd = X_ssd[self.sorter_spec][:self.n_components]
             else:
-                X_ssd = X_ssd[:, self.sorter_spec, :]
-            if self.n_components is None:
-                n_components = None
-                return X_ssd
-            else:
-                n_components = self.n_components
-                if X.ndim == 2:
-                    X_ssd = X_ssd[:n_components]
-                else:
-                    X_ssd = X_ssd[:, :n_components, :]
-                    return X_ssd
+                X_ssd = X_ssd[:, self.sorter_spec, :][:, :self.n_components, :]
+        return X_ssd
 
     def spectral_ratio_ssd(self, ssd_sources):
         """
@@ -278,7 +296,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
         """
         psd, freqs = psd_array_welch(
-            ssd_sources, sfreq=self.sampling_freq, n_fft=self.n_fft)
+            ssd_sources, sfreq=self.info['sfreq'], n_fft=self.n_fft)
         sig_idx = _time_mask(freqs, *self.freqs_signal)
         noise_idx = _time_mask(freqs, *self.freqs_noise)
         if psd.ndim == 3:
@@ -326,21 +344,18 @@ class SSD(BaseEstimator, TransformerMixin):
 
         """
         raise NotImplementedError()
+    
 
-picks_raw = mne.pick_types(raw.info, meg=True, eeg=False, ref_meg=False)
+# prepare data
 
-ssd = SSD(filt_params_signal=dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
+ssd = SSD(info=raw.info,
+          filt_params_signal=dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
                                   l_trans_bandwidth=1, h_trans_bandwidth=1,
                                   fir_design='firwin'),
           filt_params_noise=dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
                                  l_trans_bandwidth=1, h_trans_bandwidth=1,
-                                 fir_design='firwin'),
-          sampling_freq=raw.info['sfreq'])
-
-# prepare data
-X = raw.copy().pick(picks_raw).get_data()
-
-ssd.fit(X)
+                                 fir_design='firwin'))
+ssd.fit(X=raw.get_data())
 
 
 # Let's investigate spatila filter with max power ratio.
@@ -352,17 +367,17 @@ ssd.fit(X)
 
 plt.close('all')
 pattern = mne.EvokedArray(data=ssd.patterns_[:4].T,
-                          info=mne.pick_info(raw.info, picks_raw))
+                          info=ssd.info)
 pattern.plot_topomap(units=dict(mag='A.U.'), time_format='')
 
 # The topographies suggest that we picked up a parietal alpha generator.
 
 # transform
-ssd_sources = ssd.transform(X)
+ssd_sources = ssd.transform(X=raw.get_data())
 
 # get psd of SSD-filtered signals
 psd, freqs = mne.time_frequency.psd_array_welch(
-    ssd_sources, sfreq=sf, n_fft=4096)
+    ssd_sources, sfreq=raw.info['sfreq'], n_fft=4096)
 
 # get spec_ratio information
 spec_ratio = ssd.spec_ratio
@@ -402,21 +417,14 @@ plt.legend()
 # situations in which data can only be treated by chunks
 
 # Build epochs as sliding windows over the continuous raw file
-events = mne.make_fixed_length_events(raw, id=1, duration=2.0, overlap=0.0)
-
-# Epoch length is 1 second
-epochs = Epochs(raw, events, tmin=0., tmax=1, baseline=None,
-                picks=picks_raw,
-                detrend=1, decim=5, preload=True)
-
-# Build epochs as sliding windows over the continuous raw file
 events = mne.make_fixed_length_events(raw, id=1, duration=5.0, overlap=0.0)
 
 # Epoch length is 1 second
 epochs = Epochs(raw, events, tmin=0., tmax=5,
-                baseline=None, picks=picks_raw, preload=True)
+                baseline=None, preload=True)
 
-ssd_epochs = SSD(filt_params_signal=dict(l_freq=freqs_sig[0],
+ssd_epochs = SSD(info=epochs.info,
+                 filt_params_signal=dict(l_freq=freqs_sig[0],
                                          h_freq=freqs_sig[1],
                                          l_trans_bandwidth=1,
                                          h_trans_bandwidth=1,
@@ -425,11 +433,10 @@ ssd_epochs = SSD(filt_params_signal=dict(l_freq=freqs_sig[0],
                                         h_freq=freqs_noise[1],
                                         l_trans_bandwidth=1,
                                         h_trans_bandwidth=1,
-                                        fir_design='firwin'),
-                 sampling_freq=raw.info['sfreq'], picks=None)
-ssd_epochs.fit(epochs.get_data())
+                                        fir_design='firwin'))
+ssd_epochs.fit(X=epochs.get_data())
 
 # epochs
 pattern_epochs = mne.EvokedArray(data=ssd_epochs.patterns_[:4].T,
-                                 info=epochs.info)
+                                 info=ssd_epochs.info)
 pattern_epochs.plot_topomap(units=dict(mag='A.U.'), time_format='')
