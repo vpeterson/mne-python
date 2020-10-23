@@ -4,8 +4,6 @@
 
 import numpy as np
 from scipy.linalg import eigh
-
-from ..io.base import BaseRaw
 from ..io.pick import channel_type
 from ..filter import filter_data
 from ..cov import _regularized_covariance
@@ -79,7 +77,7 @@ class SSD(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, info, filt_params_signal, filt_params_noise,
-                 estimator='oas', n_components=None, picks=None,
+                 estimator='oas', n_components=None,
                  sort_by_spectral_ratio=True, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
         """Initialize instance"""
@@ -118,7 +116,6 @@ class SSD(BaseEstimator, TransformerMixin):
             self.n_fft = int(self.info['sfreq'])
         else:
             self.n_fft = int(n_fft)
-        self.picks_ = (Ellipsis if picks is None else picks) 
         self.return_filtered = return_filtered
         self.estimator = estimator
         self.n_components = n_components
@@ -230,13 +227,14 @@ class SSD(BaseEstimator, TransformerMixin):
         # We assume that ordering by spectral ratio is more important
         # than the inital ordering. This is why we apply component picks
         # after ordering.
+        sorter_spec = Ellipsis
         if self.sort_by_spectral_ratio:
             _, sorter_spec = self.get_spectral_ratio(
                 ssd_sources=X_ssd)
-            if X.ndim == 2:
-                X_ssd = X_ssd[sorter_spec][:self.n_components]
-            else:
-                X_ssd = X_ssd[:, sorter_spec, :][:, :self.n_components, :]
+        if X.ndim == 2:
+            X_ssd = X_ssd[sorter_spec][:self.n_components]
+        else:
+            X_ssd = X_ssd[:, sorter_spec, :][:, :self.n_components, :]
         return X_ssd
 
     def get_spectral_ratio(self, ssd_sources):
@@ -273,7 +271,15 @@ class SSD(BaseEstimator, TransformerMixin):
         sorter_spec = spec_ratio.argsort()[::-1]
         return spec_ratio, sorter_spec
 
-    def apply(self, inst):
+    def apply(self):
+        """
+        Not implemented, see ssd.apply() instead.
+
+        """
+        raise NotImplementedError()
+       
+
+    def inverse_transform(self, X):
         """Remove selected components from the signal.
 
         This procedure will reconstruct M/EEG signals from which the dynamics
@@ -285,30 +291,27 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        inst : instance of Raw, Epochs or ndarray
-             The data to be processed. The instance is modified inplace.
+        X : array, shape (n_channels, n_times) | shape (n_epochs,
+                n_channels, n_times)
+            The input data from which to estimate the SSD. Either 2D array
+            obtained from continous data or 3D array obtained from epoched
+            data.
 
         Returns
         -------
-        X : instance of Raw, Epochs or ndarray
+        X : array
             The processed data.
         """
-        X_ssd = self.transform(inst)
+        X_ssd = self.transform(X)
         sorter_spec = Ellipsis
         if self.sort_by_spectral_ratio:
             _, sorter_spec = self.get_spectral_ratio(ssd_sources=X_ssd)
 
         pick_patterns = self.patterns_[sorter_spec, :self.n_components].T
-        if isinstance(inst, BaseRaw):
+        if X.ndim == 2:
             X = np.dot(pick_patterns, X_ssd)
         else:
             X = np.asarray([np.dot(pick_patterns, epoch) for epoch in X_ssd])
         return X
-
-    def inverse_transform(self):
-        """
-        Not implemented, see ssd.apply() instead.
-
-        """
-        raise NotImplementedError()
+        
     
