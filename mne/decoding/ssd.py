@@ -4,6 +4,8 @@
 
 import numpy as np
 from scipy.linalg import eigh
+
+from ..io.base import BaseRaw
 from ..io.pick import channel_type
 from ..filter import filter_data
 from ..cov import _regularized_covariance
@@ -77,7 +79,7 @@ class SSD(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, info, filt_params_signal, filt_params_noise,
-                 estimator='oas', n_components=None,
+                 estimator='oas', n_components=None, picks=None,
                  sort_by_spectral_ratio=True, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
         """Initialize instance"""
@@ -116,6 +118,7 @@ class SSD(BaseEstimator, TransformerMixin):
             self.n_fft = int(self.info['sfreq'])
         else:
             self.n_fft = int(n_fft)
+        self.picks_ = (Ellipsis if picks is None else picks) 
         self.return_filtered = return_filtered
         self.estimator = estimator
         self.n_components = n_components
