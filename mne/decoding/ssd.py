@@ -118,7 +118,7 @@ class SSD(BaseEstimator, TransformerMixin):
             self.n_fft = int(self.info['sfreq'])
         else:
             self.n_fft = int(n_fft)
-        self.picks_ = (Ellipsis if picks is None else picks) 
+        self.picks_ = (Ellipsis if picks is None else picks)
         self.return_filtered = return_filtered
         self.estimator = estimator
         self.n_components = n_components
@@ -176,7 +176,7 @@ class SSD(BaseEstimator, TransformerMixin):
         X_noise = filter_data(
             X_aux, self.info['sfreq'], **self.filt_params_noise)
 
-        X_noise -= X_signal 
+        X_noise -= X_signal
         if X.ndim == 3:
             X_signal = np.hstack(X_signal)
             X_noise = np.hstack(X_noise)
@@ -187,7 +187,7 @@ class SSD(BaseEstimator, TransformerMixin):
         cov_noise = _regularized_covariance(
             X_noise, reg=self.estimator, method_params=self.cov_method_params,
             rank=self.rank, info=self.info)
-   
+
         eigvals_, eigvects_ = eigh(cov_signal, cov_noise)
         # sort in descencing order
         ix = np.argsort(eigvals_)[::-1]
@@ -232,8 +232,7 @@ class SSD(BaseEstimator, TransformerMixin):
         # after ordering.
         sorter_spec = Ellipsis
         if self.sort_by_spectral_ratio:
-            _, sorter_spec = self.get_spectral_ratio(
-                ssd_sources=X_ssd)
+            _, sorter_spec = self.get_spectral_ratio(ssd_sources=X_ssd)
         if X.ndim == 2:
             X_ssd = X_ssd[sorter_spec][:self.n_components]
         else:
@@ -276,11 +275,10 @@ class SSD(BaseEstimator, TransformerMixin):
 
     def apply(self):
         """
-        Not implemented, see ssd.apply() instead.
+        Not implemented, see ssd.inverse_transform() instead.
 
         """
         raise NotImplementedError()
-       
 
     def inverse_transform(self, X):
         """Remove selected components from the signal.
@@ -289,8 +287,6 @@ class SSD(BaseEstimator, TransformerMixin):
         described by the excluded components is subtracted
         (denoised by low-rank factorization).
         See :footcite:`HaufeEtAl2014` for more information.
-
-        The data is processed in place.
 
         Parameters
         ----------
@@ -302,7 +298,8 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Returns
         -------
-        X : array
+        X : array, shape (n_channels, n_times) | shape (n_epochs,
+                n_channels, n_times)
             The processed data.
         """
         X_ssd = self.transform(X)
@@ -316,5 +313,3 @@ class SSD(BaseEstimator, TransformerMixin):
         else:
             X = np.asarray([np.dot(pick_patterns, epoch) for epoch in X_ssd])
         return X
-        
-    
