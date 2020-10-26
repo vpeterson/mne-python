@@ -256,6 +256,6 @@ def test_ssd_pipeline():
     pipe = Pipeline([("SSD", ssd), ("CSP", csp)])
     pipe.set_params(SSD__n_components=5)
     pipe.set_params(CSP__n_components=2)
-    out=pipe.fit_transform(X_e, y)
+    out = pipe.fit_transform(X_e, y)
     assert (out.shape == (100, 2))
     assert (pipe.get_params()["SSD__n_components"] == 5)
