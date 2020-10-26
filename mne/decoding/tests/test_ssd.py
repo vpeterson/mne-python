@@ -90,8 +90,6 @@ def test_ssd():
                              l_trans_bandwidth=1, h_trans_bandwidth=1,
                              fir_design='firwin')
     ssd = SSD(info, filt_params_signal, filt_params_noise)
-    # components no int
-    pytest.raises(ValueError, ssd, n_components='foo')
     # freq no int
     for freq in ['foo', 1, 2]:
         filt_params_signal = dict(l_freq=freq, h_freq=freqs_sig[1],
@@ -100,14 +98,13 @@ def test_ssd():
         filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
                                  l_trans_bandwidth=1, h_trans_bandwidth=1,
                                  fir_design='firwin')
-        ssd = SSD(info, filt_params_signal, filt_params_noise)
-
-        pytest.raises(ValueError, ssd.fit, X)
+        with pytest.raises(ValueError):
+            ssd = SSD(info, filt_params_signal, filt_params_noise)
     # filt param no dict
     filt_params_signal = freqs_sig
     filt_params_noise = freqs_noise
-    ssd = SSD(info, filt_params_signal, filt_params_noise)
-    pytest.raises(ValueError, ssd.fit, X)
+    with pytest.raises(ValueError):
+        ssd = SSD(info, filt_params_signal, filt_params_noise)
 
     # data type
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
@@ -131,8 +128,8 @@ def test_ssd():
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
                              l_trans_bandwidth=1, h_trans_bandwidth=1,
                              fir_design='firwin')
-
-    pytest.raises(ValueError, SSD(info_2, filt_params_signal, filt_params_noise))
+    with pytest.raises(ValueError):
+        ssd = SSD(info_2, filt_params_signal, filt_params_noise)
 
     # Fit
     n_components = 10
@@ -212,10 +209,10 @@ def test_ssd_epoched_data():
 
     # Fit
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
-                              l_trans_bandwidth=1, h_trans_bandwidth=1,
+                              l_trans_bandwidth=4, h_trans_bandwidth=4,
                               fir_design='firwin')
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
-                             l_trans_bandwidth=1, h_trans_bandwidth=1,
+                             l_trans_bandwidth=4, h_trans_bandwidth=4,
                              fir_design='firwin')
 
     # ssd on epochs
@@ -246,10 +243,10 @@ def test_ssd_pipeline():
     info = create_info(ch_names=20, sfreq=sf, ch_types='eeg')
 
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
-                              l_trans_bandwidth=1, h_trans_bandwidth=1,
+                              l_trans_bandwidth=4, h_trans_bandwidth=4,
                               fir_design='firwin')
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
-                             l_trans_bandwidth=1, h_trans_bandwidth=1,
+                             l_trans_bandwidth=4, h_trans_bandwidth=4,
                              fir_design='firwin')
     ssd = SSD(info, filt_params_signal, filt_params_noise)
     csp = CSP()
