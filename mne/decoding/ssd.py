@@ -14,6 +14,8 @@ from ..utils import _time_mask
 
 class SSD(BaseEstimator, TransformerMixin):
     """
+    M/EEG signal decomposition using the Spatio-Spectral Decomposition (SSD).
+
     SSD seeks at maximizing the power at a frequency band of interest while
     simultaneously minimizing it at the flanking (surrounding) frequency bins
     (considered noise). It extremizes the covariance matrices associated to
@@ -41,15 +43,17 @@ class SSD(BaseEstimator, TransformerMixin):
         The number of components to extract from the signal.
         If n_components is None, no dimensionality reduction is applied, and
         the transformed data is projected in the whole source space.
-    sort_by_spectral_ratio: bool (default False)
-       if set to True, the components are sorted according
+    picks : array of int | None (default None)
+        The indices of good channels.
+    sort_by_spectral_ratio : bool (default False)
+       If set to True, the components are sorted according
        to the spectral ratio.
-       See Eq. (24) in :footcite:`NikulinEtAl2011`
+       See Eq. (24) in :footcite:`NikulinEtAl2011`.
     return_filtered : bool (default True)
         If return_filtered is True, data is bandpassed and projected onto
         the SSD components.
-    n_fft: int (default None)
-       if sort_by_spectral_ratio is set to True, then the sources will be
+    n_fft : int (default None)
+       If sort_by_spectral_ratio is set to True, then the sources will be
        sorted accordinly to their spectral ratio which is calculated based on
        :func:`psd_array_welch` function. The n_fft parameter set the length of
        FFT used. See :func:`mne.time_frequency.psd_array_welch` for more
@@ -80,8 +84,7 @@ class SSD(BaseEstimator, TransformerMixin):
                  estimator='oas', n_components=None, picks=None,
                  sort_by_spectral_ratio=True, return_filtered=False,
                  n_fft=None, cov_method_params=None, rank=None):
-        """Initialize instance"""
-
+        """Initialize instance."""
         dicts = {"signal": filt_params_signal, "noise": filt_params_noise}
         for param, dd in [('l', 0), ('h', 0), ('l', 1), ('h', 1)]:
             key = ('signal', 'noise')[dd]
@@ -97,8 +100,8 @@ class SSD(BaseEstimator, TransformerMixin):
         if (filt_params_noise['l_freq'] > filt_params_signal['l_freq'] or
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
             raise ValueError('Wrongly specified frequency bands!\n'
-                             'The signal band-pass must be within the noise\
-                             band-pass!')
+                             'The signal band-pass must be within the noise '
+                             'band-pass!')
         ch_types = {channel_type(info, ii)
                     for ii in range(info['nchan'])}
         if len(ch_types) > 1:
@@ -156,6 +159,7 @@ class SSD(BaseEstimator, TransformerMixin):
             data.
         y : None | array, shape (n_samples,)
                     Used for scikit-learn compatibility.
+
         Returns
         -------
         self : instance of SSD
@@ -193,6 +197,7 @@ class SSD(BaseEstimator, TransformerMixin):
         self.eigvals_ = eigvals_[ix]
         self.filters_ = eigvects_[:, ix]
         self.patterns_ = np.linalg.pinv(self.filters_)
+
         return self
 
     def transform(self, X, y=None):
@@ -206,7 +211,7 @@ class SSD(BaseEstimator, TransformerMixin):
             obtained from continous data or 3D array obtained from epoched
             data.
         y : None | array, shape (n_samples,)
-                    Used for scikit-learn compatibility.
+            Used for scikit-learn compatibility.
 
         Returns
         -------
@@ -247,15 +252,14 @@ class SSD(BaseEstimator, TransformerMixin):
         Parameters
         ----------
         ssd_sources : array
-            data proyected on source space.
+            Data proyected on source space.
 
         Returns
         -------
         spec_ratio : array, shape (n_channels)
-            array with the sprectal ratio value for each component
+            Array with the sprectal ratio value for each component.
         sorter_spec : array, shape (n_channels)
-            array of indeces for sorting spec_ratio.
-
+            Array of indeces for sorting spec_ratio.
         """
         psd, freqs = psd_array_welch(
             ssd_sources, sfreq=self.info['sfreq'], n_fft=self.n_fft)
@@ -273,11 +277,9 @@ class SSD(BaseEstimator, TransformerMixin):
         return spec_ratio, sorter_spec
 
     def apply(self):
-        """
-        Not implemented, see ssd.inverse_transform() instead.
-
-        """
-        raise NotImplementedError()
+        """Not implemented, see ssd.inverse_transform() instead."""
+        # Exists because of _XdawnTransformer
+        raise NotImplementedError('See ssd.inverse_transform()')
 
     def inverse_transform(self, X):
         """Remove selected components from the signal.
