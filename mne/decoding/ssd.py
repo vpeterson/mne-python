@@ -4,8 +4,6 @@
 
 import numpy as np
 from scipy.linalg import eigh
-
-from ..io.base import BaseRaw
 from ..io.pick import channel_type
 from ..filter import filter_data
 from ..cov import _regularized_covariance
@@ -41,8 +39,8 @@ class SSD(BaseEstimator, TransformerMixin):
         method to :func:`mne.compute_covariance`.
     n_components : int | None (default None)
         The number of components to extract from the signal.
-        If n_components is None, no dimensionality reduction is applied, and the
-        transformed data is projected in the whole source space.
+        If n_components is None, no dimensionality reduction is applied, and
+        the transformed data is projected in the whole source space.
     sort_by_spectral_ratio: bool (default False)
        if set to True, the components are sorted according
        to the spectral ratio.
@@ -99,7 +97,8 @@ class SSD(BaseEstimator, TransformerMixin):
         if (filt_params_noise['l_freq'] > filt_params_signal['l_freq'] or
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
             raise ValueError('Wrongly specified frequency bands!\n'
-                    'The signal band-pass must be within the noise band-pass!')
+                             'The signal band-pass must be within the noise\
+                             band-pass!')
         ch_types = {channel_type(info, ii)
                     for ii in range(info['nchan'])}
         if len(ch_types) > 1:
