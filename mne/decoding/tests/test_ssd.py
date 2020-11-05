@@ -11,7 +11,6 @@ from mne.decoding.ssd import SSD
 from mne.utils import requires_sklearn, _time_mask
 from mne.filter import filter_data
 from mne import create_info
-from sklearn.metrics import r2_score
 
 
 freqs_sig = 9, 12
@@ -91,8 +90,6 @@ def test_ssd():
                              l_trans_bandwidth=1, h_trans_bandwidth=1,
                              fir_design='firwin')
     ssd = SSD(info, filt_params_signal, filt_params_noise)
-    # components no int
-    pytest.raises(ValueError, ssd, n_components='foo')
     # freq no int
     for freq in ['foo', 1, 2]:
         filt_params_signal = dict(l_freq=freq, h_freq=freqs_sig[1],
@@ -101,14 +98,13 @@ def test_ssd():
         filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
                                  l_trans_bandwidth=1, h_trans_bandwidth=1,
                                  fir_design='firwin')
-        ssd = SSD(info, filt_params_signal, filt_params_noise)
-
-        pytest.raises(ValueError, ssd.fit, X)
+        with pytest.raises(ValueError):
+            ssd = SSD(info, filt_params_signal, filt_params_noise)
     # filt param no dict
     filt_params_signal = freqs_sig
     filt_params_noise = freqs_noise
-    ssd = SSD(info, filt_params_signal, filt_params_noise)
-    pytest.raises(ValueError, ssd.fit, X)
+    with pytest.raises(ValueError):
+        ssd = SSD(info, filt_params_signal, filt_params_noise)
 
     # data type
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
@@ -123,8 +119,8 @@ def test_ssd():
     pytest.raises(ValueError, ssd.fit, raw)
 
     # more than 1 channel type
-    ch_types = [['mag']*10, ['eeg']*10]
-    info = create_info(ch_names=n_channels, sfreq=sf, ch_types=ch_types)
+    ch_types = np.reshape([['mag']*10, ['eeg']*10], n_channels)
+    info_2 = create_info(ch_names=n_channels, sfreq=sf, ch_types=ch_types)
 
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
                               l_trans_bandwidth=1, h_trans_bandwidth=1,
@@ -132,9 +128,8 @@ def test_ssd():
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
                              l_trans_bandwidth=1, h_trans_bandwidth=1,
                              fir_design='firwin')
-    ssd = SSD(info, filt_params_signal, filt_params_noise)
-
-    pytest.raises(ValueError, ssd, n_components='foo')
+    with pytest.raises(ValueError):
+        ssd = SSD(info_2, filt_params_signal, filt_params_noise)
 
     # Fit
     n_components = 10
@@ -184,8 +179,8 @@ def test_ssd():
     out = ssd.transform(X)
     psd_out, _ = psd_array_welch(out[0], sfreq=250, n_fft=250)
     psd_S, _ = psd_array_welch(S[0], sfreq=250, n_fft=250)
-    R2 = r2_score(psd_out, psd_S)
-    assert np.abs(R2) > 0.95
+    corr = np.abs(np.corrcoef((psd_out, psd_S))[0, 1])
+    assert np.abs(corr) > 0.95
 
     # Check pattern estimation
     # Since there is no exact ordering of the recovered patterns
@@ -214,10 +209,10 @@ def test_ssd_epoched_data():
 
     # Fit
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
-                              l_trans_bandwidth=1, h_trans_bandwidth=1,
+                              l_trans_bandwidth=4, h_trans_bandwidth=4,
                               fir_design='firwin')
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
-                             l_trans_bandwidth=1, h_trans_bandwidth=1,
+                             l_trans_bandwidth=4, h_trans_bandwidth=4,
                              fir_design='firwin')
 
     # ssd on epochs
@@ -237,19 +232,27 @@ def test_ssd_epoched_data():
 @requires_sklearn
 def test_ssd_pipeline():
     """Test if SSD works in a pipeline."""
-    from sklearn.linear_model import LinearRegression
     from sklearn.pipeline import Pipeline
+    from mne.decoding import CSP
     sf = 250
+    X, A, S = simulate_data(n_trials=100, n_channels=20, n_samples=500)
+    X_e = np.reshape(X, (100, 20, 500))
+    # define bynary random output
+    y = np.random.randint(2, size=100)
+
     info = create_info(ch_names=20, sfreq=sf, ch_types='eeg')
 
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
-                              l_trans_bandwidth=1, h_trans_bandwidth=1,
+                              l_trans_bandwidth=4, h_trans_bandwidth=4,
                               fir_design='firwin')
     filt_params_noise = dict(l_freq=freqs_noise[0], h_freq=freqs_noise[1],
-                             l_trans_bandwidth=1, h_trans_bandwidth=1,
+                             l_trans_bandwidth=4, h_trans_bandwidth=4,
                              fir_design='firwin')
     ssd = SSD(info, filt_params_signal, filt_params_noise)
-    lm = LinearRegression()
-    pipe = Pipeline([("SSD", ssd), ("LM", lm)])
-    pipe.set_params(SSD__n_components=2)
-    assert (pipe.get_params()["SSD__n_components"] == 2)
+    csp = CSP()
+    pipe = Pipeline([("SSD", ssd), ("CSP", csp)])
+    pipe.set_params(SSD__n_components=5)
+    pipe.set_params(CSP__n_components=2)
+    out = pipe.fit_transform(X_e, y)
+    assert (out.shape == (100, 2))
+    assert (pipe.get_params()["SSD__n_components"] == 5)
