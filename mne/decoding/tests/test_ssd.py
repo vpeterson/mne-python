@@ -44,7 +44,7 @@ def simulate_data(freqs_sig=[9, 12], n_trials=100, n_channels=20,
     """Simulate data according to an instantaneous mixin model.
 
     Data are simulated in the statistical source space, where n=n_components
-    sources contain the peak of interest,
+    sources contain the peak of interest.
     """
     rs = np.random.RandomState(random_state)
 
@@ -58,7 +58,7 @@ def simulate_data(freqs_sig=[9, 12], n_trials=100, n_channels=20,
     S_s = rs.randn(n_trials * n_samples, n_components)
     # filter source in the specific freq. band of interest
     S_s = filter_data(S_s.T, samples_per_second, **filt_params_signal).T
-    S_n = rs.randn(n_trials * n_samples, n_channels-n_components)
+    S_n = rs.randn(n_trials * n_samples, n_channels - n_components)
     S = np.hstack((S_s, S_n))
     # mix data
     X_s = np.dot(mixing_mat[:, :n_components], S_s.T).T
@@ -66,7 +66,7 @@ def simulate_data(freqs_sig=[9, 12], n_trials=100, n_channels=20,
     # add noise
     X_s = X_s / np.linalg.norm(X_s, 'fro')
     X_n = X_n / np.linalg.norm(X_n, 'fro')
-    X = SNR * X_s + (1-SNR) * X_n
+    X = SNR * X_s + (1 - SNR) * X_n
     X = X.T
     S = S.T
     return X, mixing_mat, S
@@ -119,7 +119,7 @@ def test_ssd():
     pytest.raises(ValueError, ssd.fit, raw)
 
     # more than 1 channel type
-    ch_types = np.reshape([['mag']*10, ['eeg']*10], n_channels)
+    ch_types = np.reshape([['mag'] * 10, ['eeg'] * 10], n_channels)
     info_2 = create_info(ch_names=n_channels, sfreq=sf, ch_types=ch_types)
 
     filt_params_signal = dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
@@ -161,7 +161,7 @@ def test_ssd():
     # since we now that the number of true components is 5, the relative
     # difference should be low for the first 5 and then increases
     index_diff = np.argmax(-np.diff(spec_ratio))
-    assert index_diff == n_components_true-1
+    assert index_diff == n_components_true - 1
 
     # Check detected peaks
     # fit ssd
@@ -188,14 +188,16 @@ def test_ssd():
     error = list()
     for ii in range(n_channels):
         corr = np.abs(np.corrcoef(ssd.patterns_[ii, :].T, A[:, 0])[0, 1])
-        error.append(1-corr)
+        error.append(1 - corr)
         min_err = np.min(error)
     assert min_err < 0.3  # threshold taken from SSD original paper
 
 
 def test_ssd_epoched_data():
-    """Test Common Spatial Patterns algorithm on epoched data and compare
-    output when raw data is used."""
+    """Test Common Spatial Patterns algorithm on epoched data.
+
+    Compare the outputs when raw data is used.
+    """
     X, A, S = simulate_data(n_trials=100, n_channels=20, n_samples=500)
     sf = 250
     n_channels = X.shape[0]
@@ -250,9 +252,9 @@ def test_ssd_pipeline():
                              fir_design='firwin')
     ssd = SSD(info, filt_params_signal, filt_params_noise)
     csp = CSP()
-    pipe = Pipeline([("SSD", ssd), ("CSP", csp)])
+    pipe = Pipeline([('SSD', ssd), ('CSP', csp)])
     pipe.set_params(SSD__n_components=5)
     pipe.set_params(CSP__n_components=2)
     out = pipe.fit_transform(X_e, y)
     assert (out.shape == (100, 2))
-    assert (pipe.get_params()["SSD__n_components"] == 5)
+    assert (pipe.get_params()['SSD__n_components'] == 5)

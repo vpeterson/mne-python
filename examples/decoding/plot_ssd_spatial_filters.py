@@ -26,7 +26,7 @@ from mne.utils import _time_mask
 
 
 def freq_mask(freqs, fmin, fmax):
-    """convenience function to select frequencies"""
+    """Convenience function to select frequencies."""
     return _time_mask(freqs, fmin, fmax)
 
 
@@ -39,15 +39,14 @@ raw.resample(sfreq=250)
 picks_raw = mne.pick_types(
     raw.info, meg=True, eeg=False, ref_meg=False)
 raw.pick(picks_raw)
-    
+
 freqs_sig = 9, 12
 freqs_noise = 8, 13
 
 # prepare data
 
 ssd = SSD(info=raw.info,
-          sort_by_spectral_ratio=False, # True is recommended, here we need it
-                                        # for our example. 
+          sort_by_spectral_ratio=False,  # True is recommended here.
           filt_params_signal=dict(l_freq=freqs_sig[0], h_freq=freqs_sig[1],
                                   l_trans_bandwidth=1, h_trans_bandwidth=1,
                                   fir_design='firwin'),
@@ -106,8 +105,8 @@ plt.loglog(freqs[below50], psd[0, below50], label='max SNR')
 plt.loglog(freqs[below50], psd[-1, below50], label='min SNR')
 plt.loglog(freqs[below50], psd[:, below50].mean(axis=0), label='mean')
 plt.fill_between(freqs[bandfilt], 0, 10000, color='green', alpha=0.15)
-plt.xlabel("log(frequency)")
-plt.ylabel("log(power)")
+plt.xlabel('log(frequency)')
+plt.ylabel('log(power)')
 plt.legend()
 
 # We can clearly see that the selected component enjoys an SNR that is

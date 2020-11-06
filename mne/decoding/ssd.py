@@ -22,7 +22,7 @@ class SSD(BaseEstimator, TransformerMixin):
     signal and noise :footcite:`NikulinEtAl2011`.
 
     SSD can either be used as a dimensionality reduction method or a
-    ‘denoised’ low rank factorization method :footcite:`HaufeEtAl2014`.
+    ‘denoised’ low rank factorization method :footcite:`HaufeEtAl2014b`.
 
     Parameters
     ----------
@@ -90,12 +90,12 @@ class SSD(BaseEstimator, TransformerMixin):
             key = ('signal', 'noise')[dd]
             if param + '_freq' not in dicts[key]:
                 raise ValueError(
-                    "%s must be defined in filter parameters for %s"
+                    '%s must be defined in filter parameters for %s'
                     % (param + '_freq', key))
             val = dicts[key][param + '_freq']
             if not isinstance(val, (int, float)):
                 raise ValueError(
-                    "Frequencies must be numbers, got %s" % type(val))
+                    'Frequencies must be numbers, got %s' % type(val))
         # check freq bands
         if (filt_params_noise['l_freq'] > filt_params_signal['l_freq'] or
                 filt_params_signal['h_freq'] > filt_params_noise['h_freq']):
@@ -105,8 +105,8 @@ class SSD(BaseEstimator, TransformerMixin):
         ch_types = {channel_type(info, ii)
                     for ii in range(info['nchan'])}
         if len(ch_types) > 1:
-            raise ValueError("At this point SSD only supports fitting "
-                             "single channel types. Your info has %i types" %
+            raise ValueError('At this point SSD only supports fitting '
+                             'single channel types. Your info has %i types' %
                              (len(ch_types)))
         self.info = info
         self.freqs_signal = (filt_params_signal['l_freq'],
@@ -130,7 +130,7 @@ class SSD(BaseEstimator, TransformerMixin):
     def _check_X(self, X):
         """Check input data."""
         if not isinstance(X, np.ndarray):
-            raise ValueError("X should be of type ndarray (got %s)."
+            raise ValueError('X should be of type ndarray (got %s).'
                              % type(X))
         if X.ndim < 2:
             raise ValueError('X must have at least 2 dimensions.')
@@ -144,8 +144,8 @@ class SSD(BaseEstimator, TransformerMixin):
             n_chan = X.shape[1]
         if n_chan != self.info['nchan']:
             raise ValueError('Info must match the input data.'
-                             'Found %i channels but expected %i.' % (
-                                n_chan, self.info['nchan']))
+                             'Found %i channels but expected %i.' %
+                             (n_chan, self.info['nchan']))
 
     def fit(self, X, y=None):
         """Estimate the SSD decomposition on raw or epoched data.
@@ -287,7 +287,7 @@ class SSD(BaseEstimator, TransformerMixin):
         This procedure will reconstruct M/EEG signals from which the dynamics
         described by the excluded components is subtracted
         (denoised by low-rank factorization).
-        See :footcite:`HaufeEtAl2014` for more information.
+        See :footcite:`HaufeEtAl2014b` for more information.
 
         Parameters
         ----------
