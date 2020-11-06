@@ -54,7 +54,7 @@ class SSD(BaseEstimator, TransformerMixin):
         the SSD components.
     n_fft : int (default None)
        If sort_by_spectral_ratio is set to True, then the sources will be
-       sorted accordinly to their spectral ratio which is calculated based on
+       sorted accordingly to their spectral ratio which is calculated based on
        :func:`psd_array_welch` function. The n_fft parameter set the length of
        FFT used. See :func:`mne.time_frequency.psd_array_welch` for more
        information.
@@ -66,12 +66,12 @@ class SSD(BaseEstimator, TransformerMixin):
         This controls the rank computation that can be read from the
         measurement info or estimated from the data.
         See Notes of :func:`mne.compute_rank` for details.
-        We recomend to use 'full' when working with epoched data.
+        We recommend to use 'full' when working with epoched data.
 
     Attributes
     ----------
     filters_ : array, shape(n_channels, n_components)
-        The spatial filters to be multipled with the signal.
+        The spatial filters to be multiplied with the signal.
     patterns_ : array, shape(n_components, n_channels)
         The patterns for reconstructing the signal from the filtered data.
 
@@ -155,7 +155,7 @@ class SSD(BaseEstimator, TransformerMixin):
         X : array, shape (n_channels, n_times) | shape (n_epochs,
                 n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
-            obtained from continous data or 3D array obtained from epoched
+            obtained from continuous data or 3D array obtained from epoched
             data.
         y : None | array, shape (n_samples,)
                     Used for scikit-learn compatibility.
@@ -192,7 +192,7 @@ class SSD(BaseEstimator, TransformerMixin):
             rank=self.rank, info=self.info)
 
         eigvals_, eigvects_ = eigh(cov_signal, cov_noise)
-        # sort in descencing order
+        # sort in descending order
         ix = np.argsort(eigvals_)[::-1]
         self.eigvals_ = eigvals_[ix]
         self.filters_ = eigvects_[:, ix]
@@ -208,7 +208,7 @@ class SSD(BaseEstimator, TransformerMixin):
         X : array, shape (n_channels, n_times) | shape (n_epochs,
                 n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
-            obtained from continous data or 3D array obtained from epoched
+            obtained from continuous data or 3D array obtained from epoched
             data.
         y : None | array, shape (n_samples,)
             Used for scikit-learn compatibility.
@@ -232,7 +232,7 @@ class SSD(BaseEstimator, TransformerMixin):
             raise NotImplementedError()
 
         # We assume that ordering by spectral ratio is more important
-        # than the inital ordering. This is why we apply component picks
+        # than the initial ordering. This is why we apply component picks
         # after ordering.
         sorter_spec = Ellipsis
         if self.sort_by_spectral_ratio:
@@ -259,7 +259,7 @@ class SSD(BaseEstimator, TransformerMixin):
         spec_ratio : array, shape (n_channels)
             Array with the sprectal ratio value for each component.
         sorter_spec : array, shape (n_channels)
-            Array of indeces for sorting spec_ratio.
+            Array of indices for sorting spec_ratio.
         """
         psd, freqs = psd_array_welch(
             ssd_sources, sfreq=self.info['sfreq'], n_fft=self.n_fft)
@@ -294,7 +294,7 @@ class SSD(BaseEstimator, TransformerMixin):
         X : array, shape (n_channels, n_times) | shape (n_epochs,
                 n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
-            obtained from continous data or 3D array obtained from epoched
+            obtained from continuous data or 3D array obtained from epoched
             data.
 
         Returns

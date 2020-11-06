@@ -89,11 +89,11 @@ plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
 plt.axhline(1, linestyle='--')
 
-# We can see that the inital sorting based on the eigenvalues
+# We can see that the initial sorting based on the eigenvalues
 # was already quite good. However, when using few components only
 # The sorting mighte make a difference.
 
-# Let's also look at tbe power spectrum of that source and compare it to
+# Let's also look at the power spectrum of that source and compare it to
 # to the power spectrum of the source with lowest SNR.
 
 
