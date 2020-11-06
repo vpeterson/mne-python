@@ -36,9 +36,7 @@ raw = mne.io.read_raw_ctf(fname)
 raw.crop(50., 110.).load_data()  # crop for memory purposes
 raw.resample(sfreq=250)
 
-picks_raw = mne.pick_types(
-    raw.info, meg=True, eeg=False, ref_meg=False)
-raw.pick(picks_raw)
+raw.pick_types(meg=True, eeg=False, ref_meg=False)
 
 freqs_sig = 9, 12
 freqs_noise = 8, 13
@@ -56,7 +54,8 @@ ssd = SSD(info=raw.info,
 ssd.fit(X=raw.get_data())
 
 
-# Let's investigate spatila filter with max power ratio.
+###############################################################################
+# Let's investigate spatial filter with max power ratio.
 # We will first inspect the topographies.
 # According to Nikulin et al 2011 this is done.
 # by either inverting the filters (W^{-1}) or by multiplying the noise
@@ -89,6 +88,7 @@ plt.ylabel(r"Spectral Ratio $\frac{P_f}{P_{sf}}$")
 plt.legend()
 plt.axhline(1, linestyle='--')
 
+###############################################################################
 # We can see that the initial sorting based on the eigenvalues
 # was already quite good. However, when using few components only
 # The sorting mighte make a difference.

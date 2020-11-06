@@ -152,13 +152,12 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        X : array, shape (n_channels, n_times) | shape (n_epochs,
-                n_channels, n_times)
+        X : array, shape ([n_epochs, ]n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
             obtained from continuous data or 3D array obtained from epoched
             data.
         y : None | array, shape (n_samples,)
-                    Used for scikit-learn compatibility.
+            Used for scikit-learn compatibility.
 
         Returns
         -------
@@ -205,8 +204,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        X : array, shape (n_channels, n_times) | shape (n_epochs,
-                n_channels, n_times)
+        X : array, shape ([n_epochs, ]n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
             obtained from continuous data or 3D array obtained from epoched
             data.
@@ -260,6 +258,10 @@ class SSD(BaseEstimator, TransformerMixin):
             Array with the sprectal ratio value for each component.
         sorter_spec : array, shape (n_channels)
             Array of indices for sorting spec_ratio.
+
+        References
+        ----------
+        .. footbibliography::
         """
         psd, freqs = psd_array_welch(
             ssd_sources, sfreq=self.info['sfreq'], n_fft=self.n_fft)
@@ -291,16 +293,14 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        X : array, shape (n_channels, n_times) | shape (n_epochs,
-                n_channels, n_times)
+        X : array, shape ([n_epochs, ]n_channels, n_times)
             The input data from which to estimate the SSD. Either 2D array
             obtained from continuous data or 3D array obtained from epoched
             data.
 
         Returns
         -------
-        X : array, shape (n_channels, n_times) | shape (n_epochs,
-                n_channels, n_times)
+        X : array, shape ([n_epochs, ]n_channels, n_times)
             The processed data.
         """
         X_ssd = self.transform(X)
