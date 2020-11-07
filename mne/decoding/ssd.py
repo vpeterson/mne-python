@@ -55,9 +55,9 @@ class SSD(BaseEstimator, TransformerMixin):
     n_fft : int (default None)
        If sort_by_spectral_ratio is set to True, then the sources will be
        sorted accordingly to their spectral ratio which is calculated based on
-       :func:`psd_array_welch` function. The n_fft parameter set the length of
-       FFT used. See :func:`mne.time_frequency.psd_array_welch` for more
-       information.
+       :func:`mne.time_frequency.psd_array_welch` function. The n_fft parameter
+       set the length of FFT used.
+       See :func:`mne.time_frequency.psd_array_welch` for more information.
     cov_method_params : dict | None (default None)
         As in :func:`mne.decoding.SPoC`
         The default is None.
@@ -213,7 +213,7 @@ class SSD(BaseEstimator, TransformerMixin):
 
         Returns
         -------
-        X_ssd : instance of Raw, Epochs or np.array
+        X_ssd : array, shape ([n_epochs, ]n_components, n_times)
             The processed data.
         """
         self._check_X(X)
@@ -314,3 +314,4 @@ class SSD(BaseEstimator, TransformerMixin):
         else:
             X = np.asarray([np.dot(pick_patterns, epoch) for epoch in X_ssd])
         return X
+    __hash__ = None
