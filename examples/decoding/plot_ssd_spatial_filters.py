@@ -21,7 +21,6 @@ import mne
 from mne import Epochs
 from mne.datasets.fieldtrip_cmc import data_path
 from mne.decoding import SSD
-from mne.utils import _time_mask
 
 ###############################################################################
 # Define parameters
@@ -88,9 +87,9 @@ ax.axhline(1, linestyle='--')
 # Let's also look at the power spectrum of that source and compare it to
 # to the power spectrum of the source with lowest SNR.
 
-below50 = _time_mask(freqs, 0, 50)  # Convenience way for selecting freqs.
+below50 = freqs < 50
 # for highlighting the freq. band of interest
-bandfilt = _time_mask(freqs, freqs_sig[0], freqs_sig[1])
+bandfilt = (freqs_sig[0] <= freqs) & (freqs <= freqs_sig[1])
 fig, ax = plt.subplots(1)
 ax.loglog(freqs[below50], psd[0, below50], label='max SNR')
 ax.loglog(freqs[below50], psd[-1, below50], label='min SNR')
@@ -105,6 +104,7 @@ ax.legend()
 
 ###############################################################################
 # Epoched data
+# ------------
 # Although we suggest to use this method before epoching, there might be some
 # situations in which data can only be treated by chunks.
 
